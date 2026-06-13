@@ -70,7 +70,7 @@ Be respectful and inclusive. See [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
 
 ## Contact
 
-- **Author:** Владислав Софронов (cpner)
+- **Author:** Vladislav Sofronov (cpner)
 - **Telegram:** [t.me/reejb](https://t.me/reejb)
 - **Email:** feedback@gondon.su
 - **Website:** [gondon.su](https://gondon.su)

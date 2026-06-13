@@ -13,13 +13,13 @@
 
 | | |
 |---|---|
-| **Name** | Владислав Алексеевич Софронов |
+| **Name** | Vladislav Alekseevich Sofronov |
 | **GitHub** | [cpner](https://github.com/cpner) |
 | **Telegram** | [t.me/reejb](https://t.me/reejb) |
 | **Telegram Bot** | [t.me/marco_feedback_bot](https://t.me/marco_feedback_bot) |
 | **Email** | [feedback@gondon.su](mailto:feedback@gondon.su) |
 | **Website** | [gondon.su](https://gondon.su) |
-| **City** | Череповец, Россия |
+| **City** | Cherepovets, Russia |
 
 ## Quick Start
 
@@ -44,7 +44,7 @@ python3 bot_guerrilla.py
 ```
 ├── temp_email_api_checker.py      # API checker (270+ endpoints)
 ├── requirements.txt               # All dependencies
-├── LICENSE                        # MIT License — Владислав Софронов
+├── LICENSE                        # MIT License — Vladislav Sofronov
 ├── CONTRIBUTING.md                # Contribution guidelines
 ├── SECURITY.md                    # Security policy
 ├── CODE_OF_CONDUCT.md             # Code of conduct
@@ -229,7 +229,7 @@ See [SECURITY.md](SECURITY.md) for reporting vulnerabilities.
 
 This project is licensed under the MIT License — see [LICENSE](LICENSE) for details.
 
-**Author:** Владислав Софронов (cpner)
+**Author:** Vladislav Sofronov (cpner)
 
 ## Contact
 

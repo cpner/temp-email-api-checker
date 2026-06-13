@@ -56,6 +56,6 @@ Run `pip audit` regularly to check for vulnerabilities.
 
 ## Author
 
-**Владислав Софронов (cpner)**
+**Vladislav Sofronov (cpner)**
 - Website: [gondon.su](https://gondon.su)
 - Telegram: [t.me/reejb](https://t.me/reejb)
