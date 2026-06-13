@@ -1,33 +1,64 @@
 # Temp Email Telegram Bots
 
+[![Python](https://img.shields.io/badge/Python-3.7+-blue.svg)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Last Check](https://img.shields.io/badge/Last%20API%20Check-2026--06--13-orange.svg)](#api-checker-results)
+[![APIs Tested](https://img.shields.io/badge/APIs%20Tested-270+-red.svg)](#api-checker-results)
+[![Working APIs](https://img.shields.io/badge/Working-78-brightgreen.svg)](#api-checker-results)
+[![Bots](https://img.shields.io/badge/Bots-84-blueviolet.svg)](#repository-structure)
+
 **84 production-ready Telegram bots** for temporary/disposable email services, built across 3 Python frameworks and 2 languages. Includes a comprehensive API checker that tested **270+ endpoints** across 40+ services.
 
-## Quick Links
+## Quick Start
 
-- **API Checker**: [`temp_email_api_checker.py`](temp_email_api_checker.py) — tests all 270+ endpoints
-- **Bot Templates**: `russian/` and `english/` — 84 bots (14 services × 3 frameworks × 2 languages)
+```bash
+# Clone
+git clone https://github.com/cpner/temp-email-api-checker.git
+cd temp-email-api-checker
+
+# Run API checker
+pip install requests
+python3 temp_email_api_checker.py
+
+# Run a bot
+cd russian/telebot
+pip install -r requirements.txt
+export BOT_TOKEN_GUERRILLA="your_token_from_botfather"
+python3 bot_guerrilla.py
+```
 
 ## Repository Structure
 
 ```
 ├── temp_email_api_checker.py      # API checker (270+ endpoints)
 ├── requirements.txt               # All dependencies
+├── LICENSE                        # MIT License
+├── CONTRIBUTING.md                # Contribution guidelines
+├── SECURITY.md                    # Security policy
+├── CODE_OF_CONDUCT.md             # Code of conduct
+├── .github/                       # GitHub templates & CI
+│   ├── ISSUE_TEMPLATE/
+│   │   ├── bug_report.md
+│   │   └── feature_request.md
+│   ├── PULL_REQUEST_TEMPLATE.md
+│   └── workflows/
+│       └── check_apis.yml         # Weekly API check
 ├── russian/                       # Russian interface bots
 │   ├── telebot/                   # pyTelegramBotAPI 4.18.0
-│   │   ├── bot_guerrilla.py
-│   │   ├── bot_tempmail_plus.py
-│   │   ├── bot_tempmail_lol.py
-│   │   ├── bot_mail_tm.py
-│   │   ├── bot_10minutemail.py
-│   │   ├── bot_emailfake.py
-│   │   ├── bot_anonymbox.py
-│   │   ├── bot_mailsac.py
-│   │   ├── bot_mailslurp.py
-│   │   ├── bot_yopmail.py
-│   │   ├── bot_burner_kiwi.py
-│   │   ├── bot_mailnesia.py
-│   │   ├── bot_emailnator.py
-│   │   ├── bot_emailondeck.py
+│   │   ├── bot_guerrilla.py       # Guerrilla Mail
+│   │   ├── bot_tempmail_plus.py   # TempMail.plus
+│   │   ├── bot_tempmail_lol.py    # TempMail.lol
+│   │   ├── bot_mail_tm.py         # Mail.tm
+│   │   ├── bot_10minutemail.py    # 10MinuteMail
+│   │   ├── bot_emailfake.py       # EmailFake
+│   │   ├── bot_anonymbox.py       # AnonymBox
+│   │   ├── bot_mailsac.py         # MailSac
+│   │   ├── bot_mailslurp.py       # MailSlurp
+│   │   ├── bot_yopmail.py         # YOPmail
+│   │   ├── bot_burner_kiwi.py     # Burner.kiwi
+│   │   ├── bot_mailnesia.py       # Mailnesia
+│   │   ├── bot_emailnator.py      # EmailNator
+│   │   ├── bot_emailondeck.py     # EmailOnDeck
 │   │   └── requirements.txt
 │   ├── aiogram-2/                 # aiogram 2.25.1
 │   │   └── ... (same 14 bots)
@@ -40,46 +71,10 @@
 └── README.md
 ```
 
-## API Checker Results (78/270 working)
+## API Checker Results
 
-### Verified Working Services
+### Last Check: 2026-06-13 22:44 UTC
 
-| Service | API | Status | Features |
-|---------|-----|--------|----------|
-| Guerrilla Mail | `api.guerrillamail.com` | ✅ Working | Create, inbox, set user, 9 languages, IP, spam4.me |
-| TempMail.plus | `tempmail.plus/api/mails` | ✅ Working | 13 email providers (Gmail, Yahoo, Outlook...) |
-| TempMail.lol | `api.tempmail.lol` | ✅ Working | Generate + auth token |
-| Mail.tm | `api.mail.tm` | ✅ Working | Domains, account creation |
-| 10MinuteMail | `10minutemail.net` | ✅ Working | 10-minute auto-expiring emails |
-| EmailFake | `emailfake.com/api/v1` | ✅ Working | Inbox monitoring |
-| AnonymBox | `api.anonymbox.com/v1` | ✅ Working | Inbox monitoring |
-| MailSac | `mailsac.com/api` | ✅ Working | Domains, messages (API key) |
-| MailSlurp | `api.mailslurp.com` | ✅ Working | Inboxes, domains, create (API key) |
-| YOPmail | `yopmail.com` | ✅ Working | Multi-domain service |
-| Burner.kiwi | `burner.kiwi` | ✅ Working | 24-hour disposable email |
-| Mailnesia | `mailnesia.com` | ✅ Working | Anonymous email |
-| EmailNator | `emailnator.com` | ✅ Working | Disposable email generator |
-| EmailOnDeck | `emailondeck.com` | ✅ Working | Fast disposable email |
-
-### Not Working (blocked/unavailable)
-
-| Service | Reason |
-|---------|--------|
-| 1secmail.com | HTTP 403 (blocks non-browser requests) |
-| Mail.gw | HTTP 502 (service down) |
-| Mailnator API | HTTP 401 (requires API key) |
-| MailTrap | Connection error |
-| MailDrop | HTTP 404 (most endpoints) |
-| EmailOnDeck | HTTP 404 (most endpoints) |
-
-## Running the API Checker
-
-```bash
-pip install requests
-python3 temp_email_api_checker.py
-```
-
-Output:
 ```
 ======================================================================
   TEMP EMAIL API CHECKER — 270 ENDPOINTS
@@ -91,33 +86,107 @@ Output:
 ======================================================================
 ```
 
+### Verified Working (78 endpoints)
+
+| # | Service | API | Endpoints | Status |
+|---|---------|-----|-----------|--------|
+| 1 | Guerrilla Mail | `api.guerrillamail.com` | 15 | ✅ All working |
+| 2 | TempMail.plus | `tempmail.plus/api/mails` | 42 | ✅ All working |
+| 3 | TempMail.lol | `api.tempmail.lol` | 2 | ✅ All working |
+| 4 | Mail.tm | `api.mail.tm` | 1 | ✅ Working |
+| 5 | 10MinuteMail | `10minutemail.net` | 1 | ✅ Working |
+| 6 | EmailFake | `emailfake.com/api/v1` | 1 | ✅ Working |
+| 7 | AnonymBox | `api.anonymbox.com/v1` | 1 | ✅ Working |
+| 8 | MailSac | `mailsac.com/api` | 2 | ✅ Working (key) |
+| 9 | MailSlurp | `api.mailslurp.com` | 5 | ✅ Working (key) |
+| 10 | YOPmail | `yopmail.com` | 2 | ✅ Working |
+| 11 | Burner.kiwi | `burner.kiwi` | 1 | ✅ Working |
+| 12 | Mailnesia | `mailnesia.com` | 1 | ✅ Working |
+| 13 | EmailNator | `emailnator.com` | 1 | ✅ Working |
+| 14 | EmailOnDeck | `emailondeck.com` | 1 | ✅ Working |
+
+### Not Working (192 endpoints)
+
+| Service | Reason | Code |
+|---------|--------|------|
+| 1secmail.com | Blocks non-browser requests | 403 |
+| Mail.gw | Service down | 502 |
+| Mailnator | Requires API key | 401 |
+| MailTrap | Connection error | — |
+| MailDrop | Most endpoints | 404 |
+| EmailOnDeck | Most endpoints | 404 |
+| DropMail | Wrong method | 405 |
+| Mailnesia | API endpoints | 404/503 |
+| Trashmail.io | Timeout | — |
+| YOPmail inbox | Rate limited | 429 |
+| Others | Various | — |
+
+## Services Detail
+
+### Guerrilla Mail (15 endpoints)
+Full REST API — no registration required.
+- Create random email address
+- Check inbox for messages
+- Set custom username
+- Change interface language (9 languages: en/ru/de/fr/es/it/pt/ja/zh)
+- Get IP address
+- Get current language
+- Create on spam4.me domain
+- Get full email list
+
+### TempMail.plus (42 endpoints)
+Monitor inbox for any email provider.
+- **Supported**: Gmail, Yahoo, Outlook, Hotmail, ProtonMail, AOL, Zoho, GMX, Mail.com, Yandex, iCloud, 1secmail, Mailinator
+- Random/temp domain monitoring
+- Custom limit parameter
+
+### TempMail.lol (2 endpoints)
+Simple generate + auth workflow.
+- Generate email + auth token
+- Check inbox via token
+
+### Mail.tm (1 endpoint)
+REST API with account creation.
+- List available domains
+- Create accounts with random credentials
+- Read inbox messages
+- Read specific message content
+
+### 10MinuteMail (1 endpoint)
+Auto-expiring emails.
+- Generate 10-minute email
+- Timer display
+
+### Others
+- **EmailFake/AnonymBox**: Simple inbox monitoring
+- **MailSac/MailSlurp**: Professional APIs with key support
+- **YOPmail**: Multi-domain with direct links
+- **Burner.kiwi/Mailnesia/EmailNator/EmailOnDeck**: Service info
+
 ## Running Bots
 
-### telebot (pyTelegramBotAPI)
-```bash
-cd russian/telebot  # or english/telebot
-pip install -r requirements.txt
-export BOT_TOKEN_GUERRILLA="your_token_from_botfather"
-python3 bot_guerrilla.py
-```
+### Frameworks
 
-### aiogram-2
-```bash
-cd russian/aiogram-2  # or english/aiogram-2
-pip install -r requirements.txt
-export BOT_TOKEN_GUERRILLA="your_token_from_botfather"
-python3 bot_guerrilla.py
-```
+| Framework | Version | Directory |
+|-----------|---------|-----------|
+| pyTelegramBotAPI | 4.18.0 | `*/telebot/` |
+| aiogram | 2.25.1 | `*/aiogram-2/` |
+| aiogram | >=3.28.2 | `*/aiogram-3/` |
 
-### aiogram-3
-```bash
-cd russian/aiogram-3  # or english/aiogram-3
-pip install -r requirements.txt
-export BOT_TOKEN_GUERRILLA="your_token_from_botfather"
-python3 bot_guerrilla.py
-```
+### Commands
 
-## Environment Variables
+| Command | Description |
+|---------|-------------|
+| `/start` | Main menu with inline buttons |
+| `/new` | Create new email address |
+| `/set <email>` | Set email to monitor |
+| `/inbox` | Check for new messages |
+| `/read <ID>` | Read specific message |
+| `/key <API_KEY>` | Set API key (MailSac/MailSlurp) |
+| `/info` | Current session info |
+| `/help` | Help text |
+
+### Environment Variables
 
 | Bot | Variable |
 |-----|----------|
@@ -136,67 +205,18 @@ python3 bot_guerrilla.py
 | EmailNator | `BOT_TOKEN_EMAILNATOR` |
 | EmailOnDeck | `BOT_TOKEN_EMAILONDECK` |
 
-## Bot Commands
+## Contributing
 
-| Command | Description |
-|---------|-------------|
-| `/start` | Main menu with inline buttons |
-| `/new` | Create new email address |
-| `/set <email>` | Set email to monitor |
-| `/inbox` | Check for new messages |
-| `/read <ID>` | Read specific message |
-| `/key <API_KEY>` | Set API key (MailSac/MailSlurp) |
-| `/info` | Current session info |
-| `/help` | Help text |
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
-## Features by Service
+## Security
 
-### Guerrilla Mail (most feature-rich)
-- Create random email address
-- Check inbox for messages
-- Set custom username
-- Change interface language (en/ru/de/fr/es/it/pt/ja/zh)
-- Get IP address
-- Get current language
-- Create on spam4.me domain
-- Get full email list
-
-### TempMail.plus (13 email providers)
-- Monitor Gmail, Yahoo, Outlook, Hotmail, ProtonMail
-- Monitor AOL, Zoho, GMX, Mail.com, Yandex, iCloud
-- Monitor 1secmail.com, Mailinator
-- Random/temp domain monitoring
-- Custom limit parameter
-
-### TempMail.lol
-- Generate email + auth token
-- Check inbox via token
-
-### Mail.tm
-- List available domains
-- Create accounts with random credentials
-- Read inbox messages
-- Read specific message content
-
-### 10MinuteMail
-- Generate 10-minute auto-expiring email
-- Timer display
-
-### Others
-- EmailFake/AnonymBox: Simple inbox monitoring
-- MailSac/MailSlurp: Professional APIs with key support
-- YOPmail: Multi-domain with direct links
-- Burner.kiwi/Mailnesia/EmailNator/EmailOnDeck: Service info
-
-## Tech Stack
-
-| Framework | Version | Import |
-|-----------|---------|--------|
-| pyTelegramBotAPI | 4.18.0 | `import telebot` |
-| aiogram | 2.25.1 | `from aiogram import Bot, Dispatcher` |
-| aiogram | >=3.28.2 | `from aiogram import Bot, Dispatcher, F` |
-| requests | 2.32.3 | `import requests` |
+See [SECURITY.md](SECURITY.md) for reporting vulnerabilities.
 
 ## License
 
-MIT
+This project is licensed under the MIT License — see [LICENSE](LICENSE) for details.
+
+## Stargazers
+
+[![Star History Chart](https://api.star-history.com/svg?repos=cpner/temp-email-api-checker&type=Date)](https://star-history.com/#cpner/temp-email-api-checker&Date)

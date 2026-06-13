@@ -1,0 +1,39 @@
+name: Weekly API Check
+
+on:
+  schedule:
+    - cron: '0 0 * * 0'  # Every Sunday at midnight UTC
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  check-apis:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run API checker
+        id: check
+        run: |
+          python3 temp_email_api_checker.py | tee check_results.txt
+          echo "completed" >> $GITHUB_STEP_SUMMARY
+          echo "## API Check Results" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat check_results.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-check-results
+          path: check_results.txt
+          retention-days: 30
