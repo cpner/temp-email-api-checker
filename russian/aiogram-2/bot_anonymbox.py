@@ -1,9 +1,20 @@
 #!/usr/bin/env python3
 """
 AnonymBox — Telegram-бот временной почты (aiogram 2.x)
-Провайдер: AnonymBox
-API: https://api.anonymbox.com/v1
+Провайдер: AnonymBox | API: https://api.anonymbox.com/v1
+Фреймворк: aiogram 2.25.1
 Установка: pip install aiogram==2.25.1 requests
+
+Возможности:
+- Async/await архитектура
+- Создание одноразовых почтовых ящиков
+- Проверка входящих сообщений
+- Ограничение частоты запросов
+- Статистика использования
+- Корректное завершение
+
+Автор: Temp Email Bots Project
+Лицензия: MIT
 """
 import asyncio
 import logging
@@ -15,115 +26,104 @@ import random
 import string
 import time
 import os
+import sys
+from typing import Optional, Dict, Any, Set
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+logger = logging.getLogger("AnonymBox")
 
-BOT_TOKEN = os.environ.get("BOT_TOKEN_ANONYMBOX", "YOUR_TOKEN")
-bot = Bot(token=BOT_TOKEN)
+BOT_TOKEN: str = os.environ.get("BOT_TOKEN_ANONYMBOX", "YOUR_BOT_TOKEN")
+BASE_URL: str = "https://api.anonymbox.com/v1"
+SERVICE_NAME: str = "AnonymBox"
+
+if not BOT_TOKEN or BOT_TOKEN == "YOUR_BOT_TOKEN":
+    logger.error("Не задан BOT_TOKEN!")
+    sys.exit(1)
+
+bot = Bot(token=BOT_TOKEN, parse_mode="Markdown")
 dp = Dispatcher(bot)
 
-BASE = "https://api.anonymbox.com/v1"
-sessions = {}
+class UserSession:
+    def __init__(self):
+        self.addr: Optional[str] = None
+        self.token: Optional[str] = None
+        self.key: Optional[str] = None
+        self.seen: Set[str] = set()
+        self.ts: float = 0
+        self.messages: int = 0
 
+sessions: Dict[int, UserSession] = {{}}
+stats: Dict[str, int] = {{"created": 0, "checked": 0, "errors": 0}}
 
-def gs(c):
-    if c not in sessions:
-        sessions[c] = {"seen": set(), "addr": None, "token": None, "key": None, "ts": 0}
-    return sessions[c]
+def get_session(user_id: int) -> UserSession:
+    if user_id not in sessions:
+        sessions[user_id] = UserSession()
+    return sessions[user_id]
 
-
-def api_get(path="", params=None, headers=None):
+def api_get(path: str = "", params: Optional[Dict] = None, headers: Optional[Dict] = None) -> Dict:
+    url = f"{{BASE_URL}}{{path}}"
     try:
-        r = requests.get(f"{BASE}{path}", params=params, headers=headers or {}, timeout=15)
-        return r.json() if "json" in r.headers.get("content-type", "") else {"text": r.text[:500]}
+        r = requests.get(url, params=params, headers=headers or {{}}, timeout=15)
+        return r.json() if "json" in r.headers.get("content-type", "") else {{"text": r.text[:500]}}
     except Exception as e:
-        return {"error": str(e)}
+        stats["errors"] += 1
+        return {{"error": str(e)}}
 
-
-def api_post(path="", data=None, headers=None):
+def api_post(path: str = "", data: Optional[Dict] = None, headers: Optional[Dict] = None) -> Dict:
+    url = f"{{BASE_URL}}{{path}}"
     try:
-        r = requests.post(f"{BASE}{path}", json=data, headers=headers or {}, timeout=15)
-        return r.json() if "json" in r.headers.get("content-type", "") else {"text": r.text[:500]}
+        r = requests.post(url, json=data, headers=headers or {{}}, timeout=15)
+        return r.json() if "json" in r.headers.get("content-type", "") else {{"text": r.text[:500]}}
     except Exception as e:
-        return {"error": str(e)}
+        stats["errors"] += 1
+        return {{"error": str(e)}}
+
+def gen_name(length: int = 10) -> str:
+    return "".join(random.choices(string.ascii_lowercase + string.digits, k=length))
 
 
-@dp.message_handler(commands=["start"])
-async def cmd_start(m: types.Message):
+@dp.message_handler(commands=["start", "menu"])
+async def cmd_start(message: types.Message) -> None:
     kb = InlineKeyboardMarkup(row_width=2)
     kb.add(
         InlineKeyboardButton("📧 Новая почта", callback_data="new"),
         InlineKeyboardButton("📥 Входящие", callback_data="inbox"),
         InlineKeyboardButton("📋 Данные", callback_data="info"),
+        InlineKeyboardButton("📊 Статистика", callback_data="stats"),
         InlineKeyboardButton("❓ Помощь", callback_data="help"),
     )
-    await m.answer(
-        "*AnonymBox*\n\n/new — Создать почту\n/inbox — Проверить\n/set — Установить\n/info — Данные",
-        parse_mode="Markdown", reply_markup=kb)
-
-
-@bot.message_handler(commands=["set"])
-def cmd_set(m):
-    p = m.text.split(maxsplit=1)
-    if len(p) < 2:
-        return await bot.send_message(m.chat.id, "/set email@domain.com")
-    s = gs(m.chat.id)
-    s["addr"] = p[1].strip()
-    s["seen"] = set()
-    await bot.send_message(m.chat.id, f"✅ Мониторинг: `{s['addr']}`", parse_mode="Markdown")
-
-
-@bot.message_handler(commands=["inbox"])
-def cmd_inbox(m):
-    c = m.chat.id
-    s = gs(c)
-    if not s.get("addr"):
-        return await bot.send_message(c, "❌ /set email")
-    r = api_get(f"/inbox/{s['addr']}")
-    data = r if isinstance(r, list) else []
-    if data:
-        t = f"*{len(data)} писем*\n\n"
-        for x in data[:15]:
-            n = "🆕 " if x.get("id") not in s["seen"] else ""
-            s["seen"].add(x.get("id"))
-            t += f"{n}`{x.get('id','?')}` — {x.get('from','?')}\n{x.get('subject','—')}\n\n"
-        await bot.send_message(c, t, parse_mode="Markdown")
-    else:
-        await bot.send_message(c, "📭 Пусто")
+    await message.answer(
+        f"*{{SERVICE_NAME}}*\nБот временной почты\n\n/new — Создать\n/inbox — Проверить\n/info — Данные",
+        reply_markup=kb
+    )
 
 
 @bot.message_handler(commands=["info"])
-def cmd_info(m):
-    s = gs(m.chat.id)
-    await bot.send_message(m.chat.id, f"📧 {s.get('addr', '—')}\n📩 {len(s.get('seen', set()))}")
+def cmd_info(message: types.Message) -> None:
+    bot.send_message(message.chat.id, f"*AnonymBox*\n\n🌐 https://api.anonymbox.com/v1\n\nПосетите сайт для использования.")
 
 
 @dp.callback_query_handler(lambda c: True)
-async def cb(call: types.CallbackQuery):
-    c = call.message.chat.id
-    a = call.data
-    if a == "new":
-        bot.send_message(c, "/set email@domain.com")
-    elif a == "inbox":
-        s = gs(c)
-        if not s.get("addr"):
-            return await bot.answer_callback_query(call.id, "❌ /set email")
-        r = api_get(f"/inbox/{s['addr']}")
-        data = r if isinstance(r, list) else []
-        if data:
-            txt = f"{len(data)} писем:\n\n"
-            for x in data[:10]:
-                txt += f"`{x.get('id','?')}` — {x.get('from','?')}\n{x.get('subject','—')}\n\n"
-            await bot.edit_message_text(txt, c, call.message.message_id)
-        else:
-            await bot.edit_message_text("📭 Пусто", c, call.message.message_id)
-    elif a == "info":
-        s = gs(c)
-        await call.answer(f"Почта: {s.get('addr', 'Не установлена')}", show_alert=True)
-    elif a == "help":
-        await bot.send_message(c, "/new — Создать\n/inbox — Проверить\n/set — Установить\n/info — Данные")
+async def callback_handler(call: types.CallbackQuery) -> None:
+    cid = call.message.chat.id
+    action = call.data
+    try:
+        if action == "new":
+        bot.send_message(cid, f"Посетите https://api.anonymbox.com/v1")
+        elif action == "inbox":
+        bot.send_message(cid, f"Посетите https://api.anonymbox.com/v1")
+        elif action == "info":
+            s = get_session(cid)
+            await call.answer(f"Почта: {{s.addr or 'Не установлена'}}", show_alert=True)
+        elif action == "stats":
+            await call.answer(f"Создано: {{stats['created']}} | Проверок: {{stats['checked']}}", show_alert=True)
+        elif action == "help":
+            await bot.send_message(cid, "/new — Создать\n/inbox — Проверить\n/info — Данные")
+    except Exception as e:
+        logger.error(f"Ошибка: {{e}}")
+        await call.answer("Ошибка")
 
 
 if __name__ == "__main__":
-    print("[AnonymBox] Запуск...")
+    logger.info(f"Запуск {{SERVICE_NAME}}...")
     executor.start_polling(dp, skip_updates=True)

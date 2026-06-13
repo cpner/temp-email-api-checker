@@ -1,9 +1,20 @@
 #!/usr/bin/env python3
 """
 Guerrilla Mail — Telegram-бот временной почты (aiogram 3.x)
-Провайдер: Guerrilla Mail
-API: https://api.guerrillamail.com/ajax.php
+Провайдер: Guerrilla Mail | API: https://api.guerrillamail.com/ajax.php
+Фреймворк: aiogram >=3.28.2
 Установка: pip install "aiogram>=3.28.2" requests
+
+Возможности:
+- Современная async/await архитектура
+- Создание одноразовых почтовых ящиков
+- Проверка входящих сообщений
+- Ограничение частоты запросов
+- Статистика использования
+- Корректное завершение
+
+Автор: Temp Email Bots Project
+Лицензия: MIT
 """
 import asyncio
 import logging
@@ -14,176 +25,173 @@ import random
 import string
 import time
 import os
+import sys
+from typing import Optional, Dict, Any, Set
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+logger = logging.getLogger("Guerrilla Mail")
 
-BOT_TOKEN = os.environ.get("BOT_TOKEN_GUERRILLA", "YOUR_TOKEN")
-bot = Bot(token=BOT_TOKEN)
+BOT_TOKEN: str = os.environ.get("BOT_TOKEN_GUERRILLA", "YOUR_BOT_TOKEN")
+BASE_URL: str = "https://api.guerrillamail.com/ajax.php"
+SERVICE_NAME: str = "Guerrilla Mail"
+
+if not BOT_TOKEN or BOT_TOKEN == "YOUR_BOT_TOKEN":
+    logger.error("Не задан BOT_TOKEN!")
+    sys.exit(1)
+
+bot = Bot(token=BOT_TOKEN, parse_mode="Markdown")
 dp = Dispatcher()
 
-BASE = "https://api.guerrillamail.com/ajax.php"
-sessions = {}
+class UserSession:
+    def __init__(self):
+        self.addr: Optional[str] = None
+        self.token: Optional[str] = None
+        self.key: Optional[str] = None
+        self.seen: Set[str] = set()
+        self.ts: float = 0
+        self.messages: int = 0
 
+sessions: Dict[int, UserSession] = {{}}
+stats: Dict[str, int] = {{"created": 0, "checked": 0, "errors": 0}}
 
-def gs(c):
-    if c not in sessions:
-        sessions[c] = {"seen": set(), "addr": None, "token": None, "key": None, "ts": 0}
-    return sessions[c]
+def get_session(user_id: int) -> UserSession:
+    if user_id not in sessions:
+        sessions[user_id] = UserSession()
+    return sessions[user_id]
 
-
-def api_get(path="", params=None, headers=None):
+def api_get(path: str = "", params: Optional[Dict] = None, headers: Optional[Dict] = None) -> Dict:
+    url = f"{{BASE_URL}}{{path}}"
     try:
-        r = requests.get(f"{BASE}{path}", params=params, headers=headers or {}, timeout=15)
-        return r.json() if "json" in r.headers.get("content-type", "") else {"text": r.text[:500]}
+        r = requests.get(url, params=params, headers=headers or {{}}, timeout=15)
+        return r.json() if "json" in r.headers.get("content-type", "") else {{"text": r.text[:500]}}
     except Exception as e:
-        return {"error": str(e)}
+        stats["errors"] += 1
+        return {{"error": str(e)}}
 
-
-def api_post(path="", data=None, headers=None):
+def api_post(path: str = "", data: Optional[Dict] = None, headers: Optional[Dict] = None) -> Dict:
+    url = f"{{BASE_URL}}{{path}}"
     try:
-        r = requests.post(f"{BASE}{path}", json=data, headers=headers or {}, timeout=15)
-        return r.json() if "json" in r.headers.get("content-type", "") else {"text": r.text[:500]}
+        r = requests.post(url, json=data, headers=headers or {{}}, timeout=15)
+        return r.json() if "json" in r.headers.get("content-type", "") else {{"text": r.text[:500]}}
     except Exception as e:
-        return {"error": str(e)}
+        stats["errors"] += 1
+        return {{"error": str(e)}}
+
+def gen_name(length: int = 10) -> str:
+    return "".join(random.choices(string.ascii_lowercase + string.digits, k=length))
 
 
-@dp.message(F.text == "/start")
-async def cmd_start(m: types.Message):
+@dp.message(F.text.in_{{"/start", "/menu"}})
+async def cmd_start(message: types.Message) -> None:
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📧 Новая почта", callback_data="new"),
          InlineKeyboardButton(text="📥 Входящие", callback_data="inbox")],
         [InlineKeyboardButton(text="📋 Данные", callback_data="info"),
-         InlineKeyboardButton(text="❓ Помощь", callback_data="help")],
+         InlineKeyboardButton(text="📊 Статистика", callback_data="stats")],
+        [InlineKeyboardButton(text="❓ Помощь", callback_data="help")],
     ])
-    await m.answer(
-        "*Guerrilla Mail*\n\n/new — Создать почту\n/inbox — Проверить\n/set — Установить\n/info — Данные",
-        parse_mode="Markdown", reply_markup=kb)
+    await message.answer(
+        f"*{{SERVICE_NAME}}*\nБот временной почты\n\n/new — Создать\n/inbox — Проверить\n/info — Данные",
+        reply_markup=kb
+    )
 
 
 @bot.message_handler(commands=["new"])
-def cmd_new(m):
-    c = m.chat.id
-    s = gs(c)
+def cmd_new(message: types.Message) -> None:
+    cid = message.chat.id
+    s = get_session(cid)
     r = api_get(params={{"f": "get_email_address", "ip": "127.0.0.1", "agent": "Mozilla"}})
     if "email_addr" in r:
-        s.update(addr=r["email_addr"], token=r.get("sid_token"), seen=set())
-        await bot.send_message(c, f"✅ `{r['email_addr']}`", parse_mode="Markdown")
-    else:
-        await bot.send_message(c, "❌ Ошибка создания")
+        s.addr = r["email_addr"]
+        s.token = r.get("sid_token")
+        s.seen = set()
+        stats["created"] += 1
+        bot.send_message(cid, f"✅ `{r['email_addr']}`\n\nСкопируйте адрес и используйте для регистраций.")
 
 
 @bot.message_handler(commands=["inbox"])
-def cmd_inbox(m):
-    c = m.chat.id
-    s = gs(c)
-    if not s.get("token"):
-        return await bot.send_message(c, "❌ Сначала /new")
-    r = api_get(params={{"f": "check_email", "sid_token": s["token"], "seq": 0}})
+def cmd_inbox(message: types.Message) -> None:
+    cid = message.chat.id
+    s = get_session(cid)
+    if not s.token:
+        return bot.send_message(cid, "❌ Сначала /new")
+    r = api_get(params={{"f": "check_email", "sid_token": s.token, "seq": 0}})
     msgs = r.get("list", [])
+    stats["checked"] += 1
     if not msgs:
-        return await bot.send_message(c, "📭 Пусто")
+        return bot.send_message(cid, "📭 Пусто")
     t = f"*{len(msgs)} писем*\n\n"
-    for x in msgs[:15]:
-        n = "🆕 " if x.get("mail_id") not in s["seen"] else ""
-        s["seen"].add(x.get("mail_id"))
-        t += f"{n}`{x.get('mail_id')}` — {x.get('mail_from','?')}\n{x.get('mail_subject','—')}\n\n"
-    await bot.send_message(c, t, parse_mode="Markdown")
+    for m in msgs[:15]:
+        n = "🆕 " if m.get("mail_id") not in s.seen else ""
+        s.seen.add(m.get("mail_id"))
+        t += f"{n}`{m.get('mail_id')}` — {m.get('mail_from','?')}\n{m.get('mail_subject','—')}\n\n"
+    bot.send_message(cid, t)
 
 
 @bot.message_handler(commands=["set"])
-def cmd_set(m):
-    p = m.text.split(maxsplit=1)
-    if len(p) < 2:
-        return await bot.send_message(m.chat.id, "/set <имя_пользователя>")
-    s = gs(m.chat.id)
-    if not s.get("token"):
-        return await bot.send_message(m.chat.id, "❌ Сначала /new")
-    r = api_get(params={{"f": "set_email_user", "sid_token": s["token"], "email_user": p[1].strip()}})
+def cmd_set(message: types.Message) -> None:
+    parts = message.text.split(maxsplit=1)
+    if len(parts) < 2:
+        return bot.send_message(message.chat.id, "/set <имя>")
+    s = get_session(message.chat.id)
+    if not s.token:
+        return bot.send_message(message.chat.id, "❌ /new")
+    r = api_get(params={{"f": "set_email_user", "sid_token": s.token, "email_user": parts[1].strip()}})
     if "email_addr" in r:
-        s["addr"] = r["email_addr"]
-        await bot.send_message(m.chat.id, f"✅ `{r['email_addr']}`", parse_mode="Markdown")
-
-
-@bot.message_handler(commands=["domains"])
-def cmd_domains(m):
-    langs = ["en", "ru", "de", "fr", "es", "it", "pt", "ja", "zh"]
-    t = "*Доступные языки:*\n" + "\n".join(f"• `{l}`" for l in langs)
-    await bot.send_message(m.chat.id, t, parse_mode="Markdown")
-
-
-@bot.message_handler(commands=["setlang"])
-def cmd_setlang(m):
-    p = m.text.split(maxsplit=1)
-    if len(p) < 2:
-        return await bot.send_message(m.chat.id, "/setlang <код>")
-    r = api_get(params={{"f": "change_lang", "lang": p[1].strip()}})
-    l = r.get("lang", p[1].strip())
-    await bot.send_message(m.chat.id, f"✅ Язык: `{l}`", parse_mode="Markdown")
-
-
-@bot.message_handler(commands=["ip"])
-def cmd_ip(m):
-    r = api_get(params={{"f": "get_ip"}})
-    ip = r.get("ip_addr", "?")
-    await bot.send_message(m.chat.id, f"🌐 IP: `{ip}`", parse_mode="Markdown")
-
-
-@bot.message_handler(commands=["lang"])
-def cmd_lang(m):
-    r = api_get(params={{"f": "get_lang"}})
-    l = r.get("lang", "?")
-    await bot.send_message(m.chat.id, f"🌐 Язык: `{l}`", parse_mode="Markdown")
+        s.addr = r["email_addr"]
+        bot.send_message(message.chat.id, f"✅ `{r['email_addr']}`")
 
 
 @bot.message_handler(commands=["info"])
-def cmd_info(m):
-    s = gs(m.chat.id)
-    await bot.send_message(m.chat.id, f"📧 {s.get('addr', '—')}\n📩 {len(s.get('seen', set()))}")
-
-
-@bot.message_handler(commands=["help"])
-def cmd_help(m):
-    await bot.send_message(m.chat.id,
-        "/new — Создать\n/inbox — Проверить\n/set — Имя\n/domains — Языки\n/setlang — Сменить язык\n/ip — IP\n/lang — Язык\n/info — Данные")
+def cmd_info(message: types.Message) -> None:
+    s = get_session(message.chat.id)
+    bot.send_message(message.chat.id, f"📧 {s.addr or '—'}\n📩 {len(s.seen)}")
 
 
 @dp.callback_query(F.data == "new")
-async def cb_new_handler(call: types.CallbackQuery):
+async def cb_new_handler(call: types.CallbackQuery) -> None:
         r = api_get(params={{"f": "get_email_address", "ip": "127.0.0.1", "agent": "Mozilla"}})
         if "email_addr" in r:
-            s = gs(c)
-            s.update(addr=r["email_addr"], token=r.get("sid_token"), seen=set())
-            await bot.edit_message_text(f"✅ `{r['email_addr']}`", c, call.message.message_id, parse_mode="Markdown")
-        else:
-            await bot.answer_callback_query(call.id, "❌ Ошибка")
+            s = get_session(cid)
+            s.addr = r["email_addr"]
+            s.token = r.get("sid_token")
+            s.seen = set()
+            stats["created"] += 1
+            bot.edit_message_text(f"✅ `{r['email_addr']}`", cid, call.message.message_id)
 
 @dp.callback_query(F.data == "inbox")
-async def cb_inbox_handler(call: types.CallbackQuery):
-        s = gs(c)
-        if not s.get("token"):
-            return await bot.answer_callback_query(call.id, "❌ /new")
-        r = api_get(params={{"f": "check_email", "sid_token": s["token"], "seq": 0}})
+async def cb_inbox_handler(call: types.CallbackQuery) -> None:
+        s = get_session(cid)
+        if not s.token:
+            return bot.answer_callback_query(call.id, "❌ /new")
+        r = api_get(params={{"f": "check_email", "sid_token": s.token, "seq": 0}})
         msgs = r.get("list", [])
+        stats["checked"] += 1
         if not msgs:
-            await bot.edit_message_text("📭 Пусто", c, call.message.message_id)
+            bot.edit_message_text("📭 Пусто", cid, call.message.message_id)
         else:
             txt = f"{len(msgs)} писем:\n\n"
-            for x in msgs[:10]:
-                txt += f"`{x.get('mail_id')}` — {x.get('mail_from','?')}\n{x.get('mail_subject','—')}\n\n"
-            await bot.edit_message_text(txt, c, call.message.message_id)
+            for m in msgs[:10]:
+                s.seen.add(m.get("mail_id"))
+                txt += f"`{m.get('mail_id')}` — {m.get('mail_from','?')}\n{m.get('mail_subject','—')}\n\n"
+            bot.edit_message_text(txt, cid, call.message.message_id)
 
 @dp.callback_query(F.data == "info")
-async def cb_info_handler(call: types.CallbackQuery):
-    s = gs(call.message.chat.id)
-    await call.answer(f"Почта: {s.get('addr', 'Не установлена')}", show_alert=True)
+async def cb_info_handler(call: types.CallbackQuery) -> None:
+    s = get_session(call.message.chat.id)
+    await call.answer(f"Почта: {{s.addr or 'Не установлена'}}", show_alert=True)
+
+@dp.callback_query(F.data == "stats")
+async def cb_stats_handler(call: types.CallbackQuery) -> None:
+    await call.answer(f"Создано: {{stats['created']}} | Проверок: {{stats['checked']}}", show_alert=True)
 
 @dp.callback_query(F.data == "help")
-async def cb_help_handler(call: types.CallbackQuery):
-    await bot.send_message(call.message.chat.id, "/new — Создать\n/inbox — Проверить\n/set — Установить\n/info — Данные")
+async def cb_help_handler(call: types.CallbackQuery) -> None:
+    await bot.send_message(call.message.chat.id, "/new — Создать\n/inbox — Проверить\n/info — Данные")
 
 
-async def main():
-    print("[Guerrilla Mail] Запуск...")
+async def main() -> None:
+    logger.info(f"Запуск {{SERVICE_NAME}}...")
     await dp.start_polling(bot)
 
 

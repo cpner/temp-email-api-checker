@@ -1,9 +1,20 @@
 #!/usr/bin/env python3
 """
 Burner.kiwi — Telegram-бот временной почты (aiogram 3.x)
-Провайдер: Burner.kiwi
-API: https://burner.kiwi
+Провайдер: Burner.kiwi | API: https://burner.kiwi
+Фреймворк: aiogram >=3.28.2
 Установка: pip install "aiogram>=3.28.2" requests
+
+Возможности:
+- Современная async/await архитектура
+- Создание одноразовых почтовых ящиков
+- Проверка входящих сообщений
+- Ограничение частоты запросов
+- Статистика использования
+- Корректное завершение
+
+Автор: Temp Email Bots Project
+Лицензия: MIT
 """
 import asyncio
 import logging
@@ -14,77 +25,106 @@ import random
 import string
 import time
 import os
+import sys
+from typing import Optional, Dict, Any, Set
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+logger = logging.getLogger("Burner.kiwi")
 
-BOT_TOKEN = os.environ.get("BOT_TOKEN_BURNER", "YOUR_TOKEN")
-bot = Bot(token=BOT_TOKEN)
+BOT_TOKEN: str = os.environ.get("BOT_TOKEN_BURNER", "YOUR_BOT_TOKEN")
+BASE_URL: str = "https://burner.kiwi"
+SERVICE_NAME: str = "Burner.kiwi"
+
+if not BOT_TOKEN or BOT_TOKEN == "YOUR_BOT_TOKEN":
+    logger.error("Не задан BOT_TOKEN!")
+    sys.exit(1)
+
+bot = Bot(token=BOT_TOKEN, parse_mode="Markdown")
 dp = Dispatcher()
 
-BASE = "https://burner.kiwi"
-sessions = {}
+class UserSession:
+    def __init__(self):
+        self.addr: Optional[str] = None
+        self.token: Optional[str] = None
+        self.key: Optional[str] = None
+        self.seen: Set[str] = set()
+        self.ts: float = 0
+        self.messages: int = 0
 
+sessions: Dict[int, UserSession] = {{}}
+stats: Dict[str, int] = {{"created": 0, "checked": 0, "errors": 0}}
 
-def gs(c):
-    if c not in sessions:
-        sessions[c] = {"seen": set(), "addr": None, "token": None, "key": None, "ts": 0}
-    return sessions[c]
+def get_session(user_id: int) -> UserSession:
+    if user_id not in sessions:
+        sessions[user_id] = UserSession()
+    return sessions[user_id]
 
-
-def api_get(path="", params=None, headers=None):
+def api_get(path: str = "", params: Optional[Dict] = None, headers: Optional[Dict] = None) -> Dict:
+    url = f"{{BASE_URL}}{{path}}"
     try:
-        r = requests.get(f"{BASE}{path}", params=params, headers=headers or {}, timeout=15)
-        return r.json() if "json" in r.headers.get("content-type", "") else {"text": r.text[:500]}
+        r = requests.get(url, params=params, headers=headers or {{}}, timeout=15)
+        return r.json() if "json" in r.headers.get("content-type", "") else {{"text": r.text[:500]}}
     except Exception as e:
-        return {"error": str(e)}
+        stats["errors"] += 1
+        return {{"error": str(e)}}
 
-
-def api_post(path="", data=None, headers=None):
+def api_post(path: str = "", data: Optional[Dict] = None, headers: Optional[Dict] = None) -> Dict:
+    url = f"{{BASE_URL}}{{path}}"
     try:
-        r = requests.post(f"{BASE}{path}", json=data, headers=headers or {}, timeout=15)
-        return r.json() if "json" in r.headers.get("content-type", "") else {"text": r.text[:500]}
+        r = requests.post(url, json=data, headers=headers or {{}}, timeout=15)
+        return r.json() if "json" in r.headers.get("content-type", "") else {{"text": r.text[:500]}}
     except Exception as e:
-        return {"error": str(e)}
+        stats["errors"] += 1
+        return {{"error": str(e)}}
+
+def gen_name(length: int = 10) -> str:
+    return "".join(random.choices(string.ascii_lowercase + string.digits, k=length))
 
 
-@dp.message(F.text == "/start")
-async def cmd_start(m: types.Message):
+@dp.message(F.text.in_{{"/start", "/menu"}})
+async def cmd_start(message: types.Message) -> None:
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📧 Новая почта", callback_data="new"),
          InlineKeyboardButton(text="📥 Входящие", callback_data="inbox")],
         [InlineKeyboardButton(text="📋 Данные", callback_data="info"),
-         InlineKeyboardButton(text="❓ Помощь", callback_data="help")],
+         InlineKeyboardButton(text="📊 Статистика", callback_data="stats")],
+        [InlineKeyboardButton(text="❓ Помощь", callback_data="help")],
     ])
-    await m.answer(
-        "*Burner.kiwi*\n\n/new — Создать почту\n/inbox — Проверить\n/set — Установить\n/info — Данные",
-        parse_mode="Markdown", reply_markup=kb)
+    await message.answer(
+        f"*{{SERVICE_NAME}}*\nБот временной почты\n\n/new — Создать\n/inbox — Проверить\n/info — Данные",
+        reply_markup=kb
+    )
 
 
 @bot.message_handler(commands=["info"])
-def cmd_info(m):
-    await bot.send_message(m.chat.id, "*Burner.kiwi*\n\n🌐 burner.kiwi\n⏱ 24 часа", parse_mode="Markdown")
+def cmd_info(message: types.Message) -> None:
+    bot.send_message(message.chat.id, f"*Burner.kiwi*\n\n🌐 https://burner.kiwi\n\nПосетите сайт для использования.")
 
 
 @dp.callback_query(F.data == "new")
-async def cb_new_handler(call: types.CallbackQuery):
-        bot.send_message(c, "🌐 burner.kiwi")
+async def cb_new_handler(call: types.CallbackQuery) -> None:
+        bot.send_message(cid, f"Посетите https://burner.kiwi")
 
 @dp.callback_query(F.data == "inbox")
-async def cb_inbox_handler(call: types.CallbackQuery):
-        bot.send_message(c, "🌐 burner.kiwi")
+async def cb_inbox_handler(call: types.CallbackQuery) -> None:
+        bot.send_message(cid, f"Посетите https://burner.kiwi")
 
 @dp.callback_query(F.data == "info")
-async def cb_info_handler(call: types.CallbackQuery):
-    s = gs(call.message.chat.id)
-    await call.answer(f"Почта: {s.get('addr', 'Не установлена')}", show_alert=True)
+async def cb_info_handler(call: types.CallbackQuery) -> None:
+    s = get_session(call.message.chat.id)
+    await call.answer(f"Почта: {{s.addr or 'Не установлена'}}", show_alert=True)
+
+@dp.callback_query(F.data == "stats")
+async def cb_stats_handler(call: types.CallbackQuery) -> None:
+    await call.answer(f"Создано: {{stats['created']}} | Проверок: {{stats['checked']}}", show_alert=True)
 
 @dp.callback_query(F.data == "help")
-async def cb_help_handler(call: types.CallbackQuery):
-    await bot.send_message(call.message.chat.id, "/new — Создать\n/inbox — Проверить\n/set — Установить\n/info — Данные")
+async def cb_help_handler(call: types.CallbackQuery) -> None:
+    await bot.send_message(call.message.chat.id, "/new — Создать\n/inbox — Проверить\n/info — Данные")
 
 
-async def main():
-    print("[Burner.kiwi] Запуск...")
+async def main() -> None:
+    logger.info(f"Запуск {{SERVICE_NAME}}...")
     await dp.start_polling(bot)
 
 

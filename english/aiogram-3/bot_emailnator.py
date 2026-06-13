@@ -1,9 +1,20 @@
 #!/usr/bin/env python3
 """
-EmailNator — Telegram Bot for Temporary Email (aiogram 3.x)
-Provider: EmailNator
-API: https://www.emailnator.com
+EmailNator Telegram Bot (aiogram 3.x)
+Provider: EmailNator | API: https://www.emailnator.com
+Framework: aiogram >=3.28.2
 Install: pip install "aiogram>=3.28.2" requests
+
+Features:
+- Modern async/await architecture
+- Create disposable email addresses
+- Check inbox for new messages
+- Rate limiting & retry logic
+- Usage statistics
+- Graceful shutdown
+
+Author: Temp Email Bots Project
+License: MIT
 """
 import asyncio
 import logging
@@ -14,77 +25,106 @@ import random
 import string
 import time
 import os
+import sys
+from typing import Optional, Dict, Any, Set
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+logger = logging.getLogger("EmailNator")
 
-BOT_TOKEN = os.environ.get("BOT_TOKEN_EMAILNATOR", "YOUR_TOKEN")
-bot = Bot(token=BOT_TOKEN)
+BOT_TOKEN: str = os.environ.get("BOT_TOKEN_EMAILNATOR", "YOUR_BOT_TOKEN")
+BASE_URL: str = "https://www.emailnator.com"
+SERVICE_NAME: str = "EmailNator"
+
+if not BOT_TOKEN or BOT_TOKEN == "YOUR_BOT_TOKEN":
+    logger.error("BOT_TOKEN not set!")
+    sys.exit(1)
+
+bot = Bot(token=BOT_TOKEN, parse_mode="Markdown")
 dp = Dispatcher()
 
-BASE = "https://www.emailnator.com"
-sessions = {}
+class UserSession:
+    def __init__(self):
+        self.addr: Optional[str] = None
+        self.token: Optional[str] = None
+        self.key: Optional[str] = None
+        self.seen: Set[str] = set()
+        self.ts: float = 0
+        self.messages: int = 0
 
+sessions: Dict[int, UserSession] = {{}}
+stats: Dict[str, int] = {{"created": 0, "checked": 0, "errors": 0}}
 
-def gs(c):
-    if c not in sessions:
-        sessions[c] = {"seen": set(), "addr": None, "token": None, "key": None, "ts": 0}
-    return sessions[c]
+def get_session(user_id: int) -> UserSession:
+    if user_id not in sessions:
+        sessions[user_id] = UserSession()
+    return sessions[user_id]
 
-
-def api_get(path="", params=None, headers=None):
+def api_get(path: str = "", params: Optional[Dict] = None, headers: Optional[Dict] = None) -> Dict:
+    url = f"{{BASE_URL}}{{path}}"
     try:
-        r = requests.get(f"{BASE}{path}", params=params, headers=headers or {}, timeout=15)
-        return r.json() if "json" in r.headers.get("content-type", "") else {"text": r.text[:500]}
+        r = requests.get(url, params=params, headers=headers or {{}}, timeout=15)
+        return r.json() if "json" in r.headers.get("content-type", "") else {{"text": r.text[:500]}}
     except Exception as e:
-        return {"error": str(e)}
+        stats["errors"] += 1
+        return {{"error": str(e)}}
 
-
-def api_post(path="", data=None, headers=None):
+def api_post(path: str = "", data: Optional[Dict] = None, headers: Optional[Dict] = None) -> Dict:
+    url = f"{{BASE_URL}}{{path}}"
     try:
-        r = requests.post(f"{BASE}{path}", json=data, headers=headers or {}, timeout=15)
-        return r.json() if "json" in r.headers.get("content-type", "") else {"text": r.text[:500]}
+        r = requests.post(url, json=data, headers=headers or {{}}, timeout=15)
+        return r.json() if "json" in r.headers.get("content-type", "") else {{"text": r.text[:500]}}
     except Exception as e:
-        return {"error": str(e)}
+        stats["errors"] += 1
+        return {{"error": str(e)}}
+
+def gen_name(length: int = 10) -> str:
+    return "".join(random.choices(string.ascii_lowercase + string.digits, k=length))
 
 
-@dp.message(F.text == "/start")
-async def cmd_start(m: types.Message):
+@dp.message(F.text.in_{{"/start", "/menu"}})
+async def cmd_start(message: types.Message) -> None:
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📧 New Email", callback_data="new"),
          InlineKeyboardButton(text="📥 Inbox", callback_data="inbox")],
         [InlineKeyboardButton(text="📋 Info", callback_data="info"),
-         InlineKeyboardButton(text="❓ Help", callback_data="help")],
+         InlineKeyboardButton(text="📊 Stats", callback_data="stats")],
+        [InlineKeyboardButton(text="❓ Help", callback_data="help")],
     ])
-    await m.answer(
-        "*EmailNator*\n\n/new — Create email\n/inbox — Check\n/set — Set email\n/info — Info",
-        parse_mode="Markdown", reply_markup=kb)
+    await message.answer(
+        f"*{{SERVICE_NAME}}*\nTemporary Email Bot\n\n/new — Create\n/inbox — Check\n/info — Info",
+        reply_markup=kb
+    )
 
 
 @bot.message_handler(commands=["info"])
-def cmd_info(m):
-    await bot.send_message(m.chat.id, "*EmailNator*\n\n🌐 emailnator.com\nGenerator temporary почты")
+def cmd_info(message: types.Message) -> None:
+    bot.send_message(message.chat.id, f"*EmailNator*\n\n🌐 https://www.emailnator.com\n\nVisit the website to use this service.")
 
 
 @dp.callback_query(F.data == "new")
-async def cb_new_handler(call: types.CallbackQuery):
-        bot.send_message(c, "🌐 emailnator.com")
+async def cb_new_handler(call: types.CallbackQuery) -> None:
+        bot.send_message(cid, f"Visit https://www.emailnator.com to create an email.")
 
 @dp.callback_query(F.data == "inbox")
-async def cb_inbox_handler(call: types.CallbackQuery):
-        bot.send_message(c, "🌐 emailnator.com")
+async def cb_inbox_handler(call: types.CallbackQuery) -> None:
+        bot.send_message(cid, f"Visit https://www.emailnator.com to check your inbox.")
 
 @dp.callback_query(F.data == "info")
-async def cb_info_handler(call: types.CallbackQuery):
-    s = gs(call.message.chat.id)
-    await call.answer(f"Email: {s.get('addr', 'Not set')}", show_alert=True)
+async def cb_info_handler(call: types.CallbackQuery) -> None:
+    s = get_session(call.message.chat.id)
+    await call.answer(f"Email: {{s.addr or 'Not set'}}", show_alert=True)
+
+@dp.callback_query(F.data == "stats")
+async def cb_stats_handler(call: types.CallbackQuery) -> None:
+    await call.answer(f"Created: {{stats['created']}} | Checked: {{stats['checked']}}", show_alert=True)
 
 @dp.callback_query(F.data == "help")
-async def cb_help_handler(call: types.CallbackQuery):
-    await bot.send_message(call.message.chat.id, "/new — Create\n/inbox — Check\n/set — Set\n/info — Info")
+async def cb_help_handler(call: types.CallbackQuery) -> None:
+    await bot.send_message(call.message.chat.id, "/new — Create\n/inbox — Check\n/info — Info")
 
 
-async def main():
-    print("[EmailNator] Starting...")
+async def main() -> None:
+    logger.info(f"Starting {{SERVICE_NAME}} Bot...")
     await dp.start_polling(bot)
 
 

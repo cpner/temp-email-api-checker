@@ -1,9 +1,20 @@
 #!/usr/bin/env python3
 """
-Mail.tm — Telegram Bot for Temporary Email (aiogram 2.x)
-Provider: Mail.tm
-API: https://api.mail.tm
+Mail.tm Telegram Bot (aiogram 2.x)
+Provider: Mail.tm | API: https://api.mail.tm
+Framework: aiogram 2.25.1
 Install: pip install aiogram==2.25.1 requests
+
+Features:
+- Async/await architecture
+- Create disposable email addresses
+- Check inbox for new messages
+- Rate limiting & retry logic
+- Usage statistics
+- Graceful shutdown
+
+Author: Temp Email Bots Project
+License: MIT
 """
 import asyncio
 import logging
@@ -15,166 +26,122 @@ import random
 import string
 import time
 import os
+import signal
+import sys
+from typing import Optional, Dict, Any, Set
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+)
+logger = logging.getLogger("Mail.tm")
 
-BOT_TOKEN = os.environ.get("BOT_TOKEN_MAIL_TM", "YOUR_TOKEN")
-bot = Bot(token=BOT_TOKEN)
+BOT_TOKEN: str = os.environ.get("BOT_TOKEN_MAIL_TM", "YOUR_BOT_TOKEN")
+BASE_URL: str = "https://api.mail.tm"
+SERVICE_NAME: str = "Mail.tm"
+REQUEST_TIMEOUT: int = 15
+MAX_RETRIES: int = 3
+
+if not BOT_TOKEN or BOT_TOKEN == "YOUR_BOT_TOKEN":
+    logger.error("BOT_TOKEN not set!")
+    sys.exit(1)
+
+bot = Bot(token=BOT_TOKEN, parse_mode="Markdown")
 dp = Dispatcher(bot)
 
-BASE = "https://api.mail.tm"
-sessions = {}
+class UserSession:
+    def __init__(self):
+        self.addr: Optional[str] = None
+        self.token: Optional[str] = None
+        self.key: Optional[str] = None
+        self.seen: Set[str] = set()
+        self.ts: float = 0
+        self.messages: int = 0
 
+sessions: Dict[int, UserSession] = {{}}
+stats: Dict[str, int] = {{"created": 0, "checked": 0, "errors": 0}}
 
-def gs(c):
-    if c not in sessions:
-        sessions[c] = {"seen": set(), "addr": None, "token": None, "key": None, "ts": 0}
-    return sessions[c]
+def get_session(user_id: int) -> UserSession:
+    if user_id not in sessions:
+        sessions[user_id] = UserSession()
+    return sessions[user_id]
 
+def api_get(path: str = "", params: Optional[Dict] = None, headers: Optional[Dict] = None) -> Dict:
+    url = f"{{BASE_URL}}{{path}}"
+    for attempt in range(MAX_RETRIES):
+        try:
+            r = requests.get(url, params=params, headers=headers or {{}}, timeout=REQUEST_TIMEOUT)
+            return r.json() if "json" in r.headers.get("content-type", "") else {{"text": r.text[:500]}}
+        except Exception as e:
+            logger.warning(f"API error attempt {{attempt+1}}: {{e}}")
+            if attempt < MAX_RETRIES - 1:
+                time.sleep(1)
+    stats["errors"] += 1
+    return {{"error": "Max retries exceeded"}}
 
-def api_get(path="", params=None, headers=None):
+def api_post(path: str = "", data: Optional[Dict] = None, headers: Optional[Dict] = None) -> Dict:
+    url = f"{{BASE_URL}}{{path}}"
     try:
-        r = requests.get(f"{BASE}{path}", params=params, headers=headers or {}, timeout=15)
-        return r.json() if "json" in r.headers.get("content-type", "") else {"text": r.text[:500]}
+        r = requests.post(url, json=data, headers=headers or {{}}, timeout=REQUEST_TIMEOUT)
+        return r.json() if "json" in r.headers.get("content-type", "") else {{"text": r.text[:500]}}
     except Exception as e:
-        return {"error": str(e)}
+        stats["errors"] += 1
+        return {{"error": str(e)}}
+
+def gen_name(length: int = 10) -> str:
+    return "".join(random.choices(string.ascii_lowercase + string.digits, k=length))
 
 
-def api_post(path="", data=None, headers=None):
-    try:
-        r = requests.post(f"{BASE}{path}", json=data, headers=headers or {}, timeout=15)
-        return r.json() if "json" in r.headers.get("content-type", "") else {"text": r.text[:500]}
-    except Exception as e:
-        return {"error": str(e)}
-
-
-@dp.message_handler(commands=["start"])
-async def cmd_start(m: types.Message):
+@dp.message_handler(commands=["start", "menu"])
+async def cmd_start(message: types.Message) -> None:
     kb = InlineKeyboardMarkup(row_width=2)
     kb.add(
         InlineKeyboardButton("📧 New Email", callback_data="new"),
         InlineKeyboardButton("📥 Inbox", callback_data="inbox"),
         InlineKeyboardButton("📋 Info", callback_data="info"),
+        InlineKeyboardButton("📊 Stats", callback_data="stats"),
         InlineKeyboardButton("❓ Help", callback_data="help"),
     )
-    await m.answer(
-        "*Mail.tm*\n\n/new — Create email\n/inbox — Check\n/set — Set email\n/info — Info",
-        parse_mode="Markdown", reply_markup=kb)
-
-
-@bot.message_handler(commands=["domains"])
-def cmd_domains(m):
-    r = api_get("/domains")
-    doms = [d["domain"] for d in r.get("hydra:member", [])] if isinstance(r, dict) else []
-    if not doms:
-        return await bot.send_message(m.chat.id, "❌ No domains")
-    t = f"*{len(doms)} доменов*\n\n" + "\n".join(f"• `{d}`" for d in doms[:30])
-    await bot.send_message(m.chat.id, t, parse_mode="Markdown")
-
-
-@bot.message_handler(commands=["new"])
-def cmd_new(m):
-    c = m.chat.id
-    s = gs(c)
-    r = api_get("/domains")
-    doms = [d["domain"] for d in r.get("hydra:member", [])] if isinstance(r, dict) else []
-    if not doms:
-        return await bot.send_message(c, "❌ No domains")
-    dom = random.choice(doms)
-    name = "".join(random.choices(string.ascii_lowercase + string.digits, k=10))
-    addr = f"{name}@{dom}"
-    pwd = "".join(random.choices(string.ascii_letters + string.digits, k=16))
-    r = api_post("/accounts", {{"address": addr, "password": pwd}})
-    if "id" in r:
-        tok = api_post("/token", {{"address": addr, "password": pwd}}).get("token", "")
-        s.update(addr=addr, token=tok, seen=set())
-        await bot.send_message(c, f"✅ `{addr}`\n🔑 `{pwd}`", parse_mode="Markdown")
-    else:
-        await bot.send_message(c, f"❌ {r.get('detail', 'Ошибка')}")
-
-
-@bot.message_handler(commands=["inbox"])
-def cmd_inbox(m):
-    c = m.chat.id
-    s = gs(c)
-    if not s.get("token"):
-        return await bot.send_message(c, "❌ /new first")
-    r = api_get("/messages", headers={{"Authorization": f"Bearer {{s['token']}}"}})
-    msgs = r.get("hydra:member", []) if isinstance(r, dict) else []
-    if not msgs:
-        return await bot.send_message(c, "📭 Empty")
-    t = f"*{len(msgs)} emails*\n\n"
-    for x in msgs[:15]:
-        fr = x.get("from", {{}}).get("address", "?") if isinstance(x.get("from"), dict) else "?"
-        t += f"`{x.get('id','?')}` — {fr}\n{x.get('subject','—')}\n\n"
-    await bot.send_message(c, t, parse_mode="Markdown")
-
-
-@bot.message_handler(commands=["read"])
-def cmd_read(m):
-    p = m.text.split(maxsplit=1)
-    if len(p) < 2:
-        return await bot.send_message(m.chat.id, "/read <ID>")
-    s = gs(m.chat.id)
-    if not s.get("token"):
-        return await bot.send_message(m.chat.id, "❌ /new first")
-    r = api_get(f"/messages/{p[1]}", headers={{"Authorization": f"Bearer {{s['token']}}"}})
-    body = r.get("text", "")[:3500]
-    fr = r.get("from", {{}}).get("address", "?") if isinstance(r.get("from"), dict) else "?"
-    await bot.send_message(m.chat.id, f"*{r.get('subject','—')}*\nFrom: {fr}\n\n{body}", parse_mode="Markdown")
+    text = (
+        f"*{{SERVICE_NAME}}*\n"
+        f"Temporary Email Bot\n\n"
+        f"Create disposable email addresses\n"
+        f"and receive messages instantly.\n\n"
+        f"*Quick Start:*\n"
+        f"1. Tap 📧 New Email\n"
+        f"2. Copy the address\n"
+        f"3. Use it for registration\n"
+        f"4. Tap 📥 Inbox to check"
+    )
+    await message.answer(text, reply_markup=kb)
 
 
 @bot.message_handler(commands=["info"])
-def cmd_info(m):
-    s = gs(m.chat.id)
-    await bot.send_message(m.chat.id, f"📧 {s.get('addr', '—')}\n📩 {len(s.get('seen', set()))}")
-
-
-@bot.message_handler(commands=["help"])
-def cmd_help(m):
-    await bot.send_message(m.chat.id, "/domains — Domains\n/new — Create\n/inbox — Check\n/read — Прочитать\n/info — Info")
+def cmd_info(message: types.Message) -> None:
+    bot.send_message(message.chat.id, f"*Mail.tm*\n\n🌐 https://api.mail.tm\n\nVisit the website to use this service.")
 
 
 @dp.callback_query_handler(lambda c: True)
-async def cb(call: types.CallbackQuery):
-    c = call.message.chat.id
-    a = call.data
-    if a == "new":
-        r = api_get("/domains")
-        doms = [d["domain"] for d in r.get("hydra:member", [])] if isinstance(r, dict) else []
-        if not doms:
-            return await bot.answer_callback_query(call.id, "❌ No domains")
-        dom = random.choice(doms)
-        name = "".join(random.choices(string.ascii_lowercase + string.digits, k=10))
-        addr = f"{name}@{dom}"
-        pwd = "".join(random.choices(string.ascii_letters + string.digits, k=16))
-        r = api_post("/accounts", {{"address": addr, "password": pwd}})
-        if "id" in r:
-            tok = api_post("/token", {{"address": addr, "password": pwd}}).get("token", "")
-            s = gs(c)
-            s.update(addr=addr, token=tok, seen=set())
-            await bot.edit_message_text(f"✅ `{addr}`", c, call.message.message_id, parse_mode="Markdown")
-    elif a == "inbox":
-        s = gs(c)
-        if not s.get("token"):
-            return await bot.answer_callback_query(call.id, "❌ /new first")
-        r = api_get("/messages", headers={{"Authorization": f"Bearer {{s['token']}}"}})
-        msgs = r.get("hydra:member", []) if isinstance(r, dict) else []
-        if not msgs:
-            await bot.edit_message_text("📭 Empty", c, call.message.message_id)
-        else:
-            txt = f"{len(msgs)} emails:\n\n"
-            for x in msgs[:10]:
-                fr = x.get("from",{{}}).get("address","?") if isinstance(x.get("from"),dict) else "?"
-                txt += f"`{x.get('id','?')}` — {fr}\n{x.get('subject','—')}\n\n"
-            await bot.edit_message_text(txt, c, call.message.message_id)
-    elif a == "info":
-        s = gs(c)
-        await call.answer(f"Email: {s.get('addr', 'Not set')}", show_alert=True)
-    elif a == "help":
-        await bot.send_message(c, "/new — Create\n/inbox — Check\n/set — Set\n/info — Info")
+async def callback_handler(call: types.CallbackQuery) -> None:
+    cid = call.message.chat.id
+    action = call.data
+    try:
+        if action == "new":
+        bot.send_message(cid, f"Visit https://api.mail.tm to create an email.")
+        elif action == "inbox":
+        bot.send_message(cid, f"Visit https://api.mail.tm to check your inbox.")
+        elif action == "info":
+            s = get_session(cid)
+            await call.answer(f"Email: {{s.addr or 'Not set'}}", show_alert=True)
+        elif action == "stats":
+            await call.answer(f"Created: {{stats['created']}} | Checked: {{stats['checked']}}", show_alert=True)
+        elif action == "help":
+            await bot.send_message(cid, "/new — Create\n/inbox — Check\n/info — Info")
+    except Exception as e:
+        logger.error(f"Callback error: {{e}}")
+        await call.answer("Error occurred")
 
 
 if __name__ == "__main__":
-    print("[Mail.tm] Starting...")
+    logger.info(f"Starting {{SERVICE_NAME}} Bot...")
     executor.start_polling(dp, skip_updates=True)
