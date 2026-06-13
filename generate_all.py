@@ -1,16 +1,13 @@
 #!/usr/bin/env python3
 """
-Professional Generator: 84 Telegram bots × 3 frameworks × 2 languages
-All bots include: error handling, logging, type hints, rate limiting, retry logic,
-comprehensive help, statistics, session management, graceful shutdown.
+Generator: 84 Telegram bots — proper English/Russian separation.
+English bots: all text in English, author "Vladislav Sofronov (cpner)"
+Russian bots: all text in Russian, author "Владислав Софронов (cpner)"
 """
 import os
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 
-# ═══════════════════════════════════════════════════════════════
-# SERVICE DEFINITIONS (verified working APIs only)
-# ═══════════════════════════════════════════════════════════════
 SERVICES = [
     {"id":"guerrilla","name":"Guerrilla Mail","url":"https://api.guerrillamail.com/ajax.php","env":"BOT_TOKEN_GUERRILLA"},
     {"id":"tempmail_plus","name":"TempMail.plus","url":"https://tempmail.plus/api/mails","env":"BOT_TOKEN_TEMPMAIL_PLUS"},
@@ -29,7 +26,7 @@ SERVICES = [
 ]
 
 # ═══════════════════════════════════════════════════════════════
-# TELEBOT TEMPLATE (ENGLISH)
+# TELEBOT ENGLISH
 # ═══════════════════════════════════════════════════════════════
 TELEBOT_EN = '''#!/usr/bin/env python3
 """
@@ -47,269 +44,17 @@ Features:
 - Usage statistics
 - Graceful shutdown
 
-Author: Владислав Софронов (cpner)
+Author: Vladislav Sofronov (cpner)
 Contact: feedback@gondon.su | t.me/reejb | gondon.su
 License: MIT
 """
 import telebot
 from telebot import types
 import requests
-import random
-import string
-import time
-import os
-import signal
-import sys
-import logging
+import random, string, time, os, signal, sys, logging
 from typing import Optional, Dict, Any, Set
 
-# ═══════════════════════════════════════════════════════════════
-# Configuration
-# ═══════════════════════════════════════════════════════════════
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    handlers=[logging.StreamHandler()]
-)
-logger = logging.getLogger("{name}")
-
-BOT_TOKEN: str = os.environ.get("{env_var}", "YOUR_BOT_TOKEN")
-BASE_URL: str = "{base_url}"
-SERVICE_NAME: str = "{name}"
-REQUEST_TIMEOUT: int = 15
-MAX_RETRIES: int = 3
-RETRY_DELAY: float = 1.0
-RATE_LIMIT_DELAY: float = 0.5
-
-if not BOT_TOKEN or BOT_TOKEN == "YOUR_BOT_TOKEN":
-    logger.error("BOT_TOKEN not set! Set environment variable {env_var}")
-    sys.exit(1)
-
-bot = telebot.TeleBot(BOT_TOKEN, parse_mode="Markdown")
-
-# ═══════════════════════════════════════════════════════════════
-# Session Management
-# ═══════════════════════════════════════════════════════════════
-class UserSession:
-    """Manages user state and data."""
-    def __init__(self):
-        self.addr: Optional[str] = None
-        self.token: Optional[str] = None
-        self.key: Optional[str] = None
-        self.seen: Set[str] = set()
-        self.ts: float = 0
-        self.messages: int = 0
-
-sessions: Dict[int, UserSession] = {}
-stats: Dict[str, int] = {{"created": 0, "checked": 0, "errors": 0}}
-
-def get_session(user_id: int) -> UserSession:
-    if user_id not in sessions:
-        sessions[user_id] = UserSession()
-    return sessions[user_id]
-
-# ═══════════════════════════════════════════════════════════════
-# API Client with retry logic
-# ═══════════════════════════════════════════════════════════════
-def api_request(method: str, path: str = "", params: Optional[Dict] = None,
-                data: Optional[Dict] = None, headers: Optional[Dict] = None) -> Dict[str, Any]:
-    """Make API request with retry logic and error handling."""
-    url = f"{{BASE_URL}}{{path}}"
-    for attempt in range(MAX_RETRIES):
-        try:
-            if method == "GET":
-                resp = requests.get(url, params=params, headers=headers or {{}}, timeout=REQUEST_TIMEOUT)
-            elif method == "POST":
-                resp = requests.post(url, json=data, headers=headers or {{}}, timeout=REQUEST_TIMEOUT)
-            else:
-                return {{"error": f"Unsupported method: {{method}}"}}
-
-            if "json" in resp.headers.get("content-type", ""):
-                return resp.json()
-            return {{"text": resp.text[:500], "status": resp.status_code}}
-
-        except requests.exceptions.Timeout:
-            logger.warning(f"Timeout on attempt {{attempt+1}}/{{MAX_RETRIES}}: {{url}}")
-        except requests.exceptions.ConnectionError:
-            logger.warning(f"Connection error on attempt {{attempt+1}}/{{MAX_RETRIES}}: {{url}}")
-        except Exception as e:
-            logger.error(f"Request error: {{e}}")
-            return {{"error": str(e)}}
-
-        if attempt < MAX_RETRIES - 1:
-            time.sleep(RETRY_DELAY * (attempt + 1))
-
-    stats["errors"] += 1
-    return {{"error": "Max retries exceeded"}}
-
-def api_get(path: str = "", params: Optional[Dict] = None, headers: Optional[Dict] = None) -> Dict:
-    return api_request("GET", path, params=params, headers=headers)
-
-def api_post(path: str = "", data: Optional[Dict] = None, headers: Optional[Dict] = None) -> Dict:
-    return api_request("POST", path, data=data, headers=headers)
-
-# ═══════════════════════════════════════════════════════════════
-# Utility Functions
-# ═══════════════════════════════════════════════════════════════
-def gen_name(length: int = 10) -> str:
-    return "".join(random.choices(string.ascii_lowercase + string.digits, k=length))
-
-def safe_text(text: str, max_len: int = 4000) -> str:
-    return text[:max_len] if text else "No content"
-
-# ═══════════════════════════════════════════════════════════════
-# Command Handlers
-# ═══════════════════════════════════════════════════════════════
-@bot.message_handler(commands=["start", "menu"])
-def cmd_start(message: types.Message) -> None:
-    kb = types.InlineKeyboardMarkup(row_width=2)
-    kb.add(
-        types.InlineKeyboardButton("📧 New Email", callback_data="new"),
-        types.InlineKeyboardButton("📥 Inbox", callback_data="inbox"),
-        types.InlineKeyboardButton("📋 Info", callback_data="info"),
-        types.InlineKeyboardButton("📊 Stats", callback_data="stats"),
-        types.InlineKeyboardButton("❓ Help", callback_data="help"),
-    )
-    text = (
-        f"*{{SERVICE_NAME}}*\\n"
-        f"Temporary Email Bot\\n\\n"
-        f"Create disposable email addresses\\n"
-        f"and receive messages instantly.\\n\\n"
-        f"*Quick Start:*\\n"
-        f"1. Tap 📧 New Email\\n"
-        f"2. Copy the address\\n"
-        f"3. Use it for registration\\n"
-        f"4. Tap 📥 Inbox to check\\n\\n"
-        f"*Commands:*\\n"
-        f"/new — Create email\\n"
-        f"/inbox — Check messages\\n"
-        f"/set — Set email manually\\n"
-        f"/info — Session info\\n"
-        f"/stats — Usage statistics\\n"
-        f"/help — Detailed help"
-    )
-    bot.send_message(message.chat.id, text, reply_markup=kb)
-    logger.info(f"User {{message.chat.id}} started bot")
-
-
-{commands}
-
-
-@bot.callback_query_handler(func=lambda c: True)
-def callback_handler(call: types.CallbackQuery) -> None:
-    cid = call.message.chat.id
-    action = call.data
-    try:
-        if action == "new":
-{cb_new}
-        elif action == "inbox":
-{cb_inbox}
-        elif action == "info":
-            s = get_session(cid)
-            text = (
-                f"*Session Info*\\n\\n"
-                f"Email: `{{s.addr or 'Not set'}}`\\n"
-                f"Token: `{{str(s.token or '')[:20]}}...`\\n"
-                f"Messages read: {{s.messages}}\\n"
-                f"Unique seen: {{len(s.seen)}}"
-            )
-            bot.answer_callback_query(call.id, text, show_alert=True)
-        elif action == "stats":
-            text = (
-                f"*Bot Statistics*\\n\\n"
-                f"Emails created: {{stats['created']}}\\n"
-                f"Inboxes checked: {{stats['checked']}}\\n"
-                f"Errors: {{stats['errors']}}\\n"
-                f"Active sessions: {{len(sessions)}}"
-            )
-            bot.answer_callback_query(call.id, text, show_alert=True)
-        elif action == "help":
-            bot.send_message(cid, get_help_text())
-        else:
-            bot.answer_callback_query(call.id, "Unknown action")
-    except Exception as e:
-        logger.error(f"Callback error: {{e}}")
-        bot.answer_callback_query(call.id, "An error occurred")
-
-
-def get_help_text() -> str:
-    return (
-        f"*{{SERVICE_NAME}} Bot — Help*\\n\\n"
-        f"*Commands:*\\n"
-        f"/new — Create new email\\n"
-        f"/inbox — Check inbox\\n"
-        f"/set <email> — Set email to monitor\\n"
-        f"/read <ID> — Read specific message\\n"
-        f"/key <KEY> — Set API key\\n"
-        f"/info — Current session info\\n"
-        f"/stats — Usage statistics\\n"
-        f"/help — This help\\n\\n"
-        f"*Provider:* {{SERVICE_NAME}}\\n"
-        f"*API:* `{{BASE_URL}}`\\n\\n"
-        f"*Tips:*\\n"
-        f"- Create email first with /new\\n"
-        f"- Check inbox regularly\\n"
-        f"- Use /info to see session details"
-    )
-
-# ═══════════════════════════════════════════════════════════════
-# Graceful Shutdown
-# ═══════════════════════════════════════════════════════════════
-def signal_handler(sig, frame):
-    logger.info("Shutting down gracefully...")
-    sys.exit(0)
-
-signal.signal(signal.SIGINT, signal_handler)
-signal.signal(signal.SIGTERM, signal_handler)
-
-# ═══════════════════════════════════════════════════════════════
-# Entry Point
-# ═══════════════════════════════════════════════════════════════
-if __name__ == "__main__":
-    logger.info(f"Starting {{SERVICE_NAME}} Bot...")
-    logger.info(f"API: {{BASE_URL}}")
-    bot.infinity_polling(timeout=60, long_polling_timeout=60)
-'''
-
-# ═══════════════════════════════════════════════════════════════
-# TELEBOT TEMPLATE (RUSSIAN)
-# ═══════════════════════════════════════════════════════════════
-TELEBOT_RU = '''#!/usr/bin/env python3
-"""
-{name} — Telegram-бот временной почты
-Провайдер: {name} | API: {base_url}
-Фреймворк: pyTelegramBotAPI 4.18.0
-Установка: pip install pyTelegramBotAPI requests
-
-Возможности:
-- Создание одноразовых почтовых ящиков
-- Проверка входящих сообщений
-- Мониторинг в реальном времени
-- Обработка ошибок
-- Ограничение частоты запросов
-- Статистика использования
-- Корректное завершение
-
-Автор: Temp Email Bots Project
-Лицензия: MIT
-"""
-import telebot
-from telebot import types
-import requests
-import random
-import string
-import time
-import os
-import signal
-import sys
-import logging
-from typing import Optional, Dict, Any, Set
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    handlers=[logging.StreamHandler()]
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("{name}")
 
 BOT_TOKEN: str = os.environ.get("{env_var}", "YOUR_BOT_TOKEN")
@@ -320,7 +65,7 @@ MAX_RETRIES: int = 3
 RETRY_DELAY: float = 1.0
 
 if not BOT_TOKEN or BOT_TOKEN == "YOUR_BOT_TOKEN":
-    logger.error("Не задан BOT_TOKEN! Установите переменную {env_var}")
+    logger.error("BOT_TOKEN not set! Set {env_var}")
     sys.exit(1)
 
 bot = telebot.TeleBot(BOT_TOKEN, parse_mode="Markdown")
@@ -338,48 +83,170 @@ sessions: Dict[int, UserSession] = {{}}
 stats: Dict[str, int] = {{"created": 0, "checked": 0, "errors": 0}}
 
 def get_session(user_id: int) -> UserSession:
-    if user_id not in sessions:
-        sessions[user_id] = UserSession()
+    if user_id not in sessions: sessions[user_id] = UserSession()
     return sessions[user_id]
 
-def api_request(method: str, path: str = "", params: Optional[Dict] = None,
-                data: Optional[Dict] = None, headers: Optional[Dict] = None) -> Dict[str, Any]:
+def api_get(path: str = "", params: Optional[Dict] = None, headers: Optional[Dict] = None) -> Dict:
     url = f"{{BASE_URL}}{{path}}"
     for attempt in range(MAX_RETRIES):
         try:
-            if method == "GET":
-                resp = requests.get(url, params=params, headers=headers or {{}}, timeout=REQUEST_TIMEOUT)
-            elif method == "POST":
-                resp = requests.post(url, json=data, headers=headers or {{}}, timeout=REQUEST_TIMEOUT)
-            else:
-                return {{"error": f"Неподдерживаемый метод: {{method}}"}}
-            if "json" in resp.headers.get("content-type", ""):
-                return resp.json()
-            return {{"text": resp.text[:500], "status": resp.status_code}}
-        except requests.exceptions.Timeout:
-            logger.warning(f"Таймаут попытка {{attempt+1}}/{{MAX_RETRIES}}: {{url}}")
-        except requests.exceptions.ConnectionError:
-            logger.warning(f"Ошибка соединения попытка {{attempt+1}}/{{MAX_RETRIES}}: {{url}}")
+            r = requests.get(url, params=params, headers=headers or {{}}, timeout=REQUEST_TIMEOUT)
+            return r.json() if "json" in r.headers.get("content-type", "") else {{"text": r.text[:500]}}
         except Exception as e:
-            logger.error(f"Ошибка запроса: {{e}}")
-            return {{"error": str(e)}}
-        if attempt < MAX_RETRIES - 1:
-            time.sleep(RETRY_DELAY * (attempt + 1))
+            logger.warning(f"API error attempt {{attempt+1}}/{{MAX_RETRIES}}: {{e}}")
+            if attempt < MAX_RETRIES - 1: time.sleep(RETRY_DELAY * (attempt + 1))
     stats["errors"] += 1
-    return {{"error": "Превышено максимальное количество попыток"}}
-
-def api_get(path: str = "", params: Optional[Dict] = None, headers: Optional[Dict] = None) -> Dict:
-    return api_request("GET", path, params=params, headers=headers)
+    return {{"error": "Max retries exceeded"}}
 
 def api_post(path: str = "", data: Optional[Dict] = None, headers: Optional[Dict] = None) -> Dict:
-    return api_request("POST", path, data=data, headers=headers)
+    url = f"{{BASE_URL}}{{path}}"
+    try:
+        r = requests.post(url, json=data, headers=headers or {{}}, timeout=REQUEST_TIMEOUT)
+        return r.json() if "json" in r.headers.get("content-type", "") else {{"text": r.text[:500]}}
+    except Exception as e:
+        stats["errors"] += 1
+        return {{"error": str(e)}}
 
 def gen_name(length: int = 10) -> str:
     return "".join(random.choices(string.ascii_lowercase + string.digits, k=length))
 
 
 @bot.message_handler(commands=["start", "menu"])
-def cmd_start(message: types.Message) -> None:
+def cmd_start(m: types.Message) -> None:
+    kb = types.InlineKeyboardMarkup(row_width=2)
+    kb.add(
+        types.InlineKeyboardButton("📧 New Email", callback_data="new"),
+        types.InlineKeyboardButton("📥 Inbox", callback_data="inbox"),
+        types.InlineKeyboardButton("📋 Info", callback_data="info"),
+        types.InlineKeyboardButton("📊 Stats", callback_data="stats"),
+        types.InlineKeyboardButton("❓ Help", callback_data="help"),
+    )
+    bot.send_message(m.chat.id,
+        "*{{SERVICE_NAME}}*\\nTemporary Email Bot\\n\\n/new — Create\\n/inbox — Check\\n/set — Set email\\n/info — Info\\n/help — Help",
+        reply_markup=kb)
+
+
+{commands}
+
+
+@bot.callback_query_handler(func=lambda c: True)
+def cb(call: types.CallbackQuery) -> None:
+    c = call.message.chat.id
+    a = call.data
+    try:
+        if a == "new": {cb_new}
+        elif a == "inbox": {cb_inbox}
+        elif a == "info":
+            s = get_session(c)
+            bot.answer_callback_query(call.id, f"Email: {{s.addr or 'Not set'}}", show_alert=True)
+        elif a == "stats":
+            bot.answer_callback_query(call.id, f"Created: {{stats['created']}} | Checked: {{stats['checked']}}", show_alert=True)
+        elif a == "help":
+            bot.send_message(c, "/new — Create\\n/inbox — Check\\n/set — Set\\n/info — Info")
+    except Exception as e:
+        logger.error(f"Error: {{e}}")
+        bot.answer_callback_query(call.id, "Error occurred")
+
+
+def signal_handler(sig, frame):
+    logger.info("Shutting down...")
+    sys.exit(0)
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
+
+if __name__ == "__main__":
+    logger.info(f"Starting {{SERVICE_NAME}}...")
+    bot.infinity_polling(timeout=60, long_polling_timeout=60)
+'''
+
+# ═══════════════════════════════════════════════════════════════
+# TELEBOT RUSSIAN
+# ═══════════════════════════════════════════════════════════════
+TELEBOT_RU = '''#!/usr/bin/env python3
+"""
+{name} — Telegram-бот временной почты
+Провайдер: {name} | API: {base_url}
+Фреймворк: pyTelegramBotAPI 4.18.0
+Установка: pip install pyTelegramBotAPI requests
+
+Возможности:
+- Создание одноразовых почтовых ящиков
+- Проверка входящих сообщений
+- Мониторинг в реальном времени
+- Обработка ошибок
+- Ограничение частоты запросов
+- Статистика использования
+- Корректное завершение
+
+Автор: Владислав Софронов (cpner)
+Контакт: feedback@gondon.su | t.me/reejb | gondon.su
+Лицензия: MIT
+"""
+import telebot
+from telebot import types
+import requests
+import random, string, time, os, signal, sys, logging
+from typing import Optional, Dict, Any, Set
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+logger = logging.getLogger("{name}")
+
+BOT_TOKEN: str = os.environ.get("{env_var}", "YOUR_BOT_TOKEN")
+BASE_URL: str = "{base_url}"
+SERVICE_NAME: str = "{name}"
+REQUEST_TIMEOUT: int = 15
+MAX_RETRIES: int = 3
+RETRY_DELAY: float = 1.0
+
+if not BOT_TOKEN or BOT_TOKEN == "YOUR_BOT_TOKEN":
+    logger.error("Не задан BOT_TOKEN! Установите {env_var}")
+    sys.exit(1)
+
+bot = telebot.TeleBot(BOT_TOKEN, parse_mode="Markdown")
+
+class UserSession:
+    def __init__(self):
+        self.addr: Optional[str] = None
+        self.token: Optional[str] = None
+        self.key: Optional[str] = None
+        self.seen: Set[str] = set()
+        self.ts: float = 0
+        self.messages: int = 0
+
+sessions: Dict[int, UserSession] = {{}}
+stats: Dict[str, int] = {{"created": 0, "checked": 0, "errors": 0}}
+
+def get_session(user_id: int) -> UserSession:
+    if user_id not in sessions: sessions[user_id] = UserSession()
+    return sessions[user_id]
+
+def api_get(path: str = "", params: Optional[Dict] = None, headers: Optional[Dict] = None) -> Dict:
+    url = f"{{BASE_URL}}{{path}}"
+    for attempt in range(MAX_RETRIES):
+        try:
+            r = requests.get(url, params=params, headers=headers or {{}}, timeout=REQUEST_TIMEOUT)
+            return r.json() if "json" in r.headers.get("content-type", "") else {{"text": r.text[:500]}}
+        except Exception as e:
+            logger.warning(f"Ошибка API попытка {{attempt+1}}/{{MAX_RETRIES}}: {{e}}")
+            if attempt < MAX_RETRIES - 1: time.sleep(RETRY_DELAY * (attempt + 1))
+    stats["errors"] += 1
+    return {{"error": "Превышено количество попыток"}}
+
+def api_post(path: str = "", data: Optional[Dict] = None, headers: Optional[Dict] = None) -> Dict:
+    url = f"{{BASE_URL}}{{path}}"
+    try:
+        r = requests.post(url, json=data, headers=headers or {{}}, timeout=REQUEST_TIMEOUT)
+        return r.json() if "json" in r.headers.get("content-type", "") else {{"text": r.text[:500]}}
+    except Exception as e:
+        stats["errors"] += 1
+        return {{"error": str(e)}}
+
+def gen_name(length: int = 10) -> str:
+    return "".join(random.choices(string.ascii_lowercase + string.digits, k=length))
+
+
+@bot.message_handler(commands=["start", "menu"])
+def cmd_start(m: types.Message) -> None:
     kb = types.InlineKeyboardMarkup(row_width=2)
     kb.add(
         types.InlineKeyboardButton("📧 Новая почта", callback_data="new"),
@@ -388,89 +255,36 @@ def cmd_start(message: types.Message) -> None:
         types.InlineKeyboardButton("📊 Статистика", callback_data="stats"),
         types.InlineKeyboardButton("❓ Помощь", callback_data="help"),
     )
-    text = (
-        f"*{{SERVICE_NAME}}*\\n"
-        f"Бот временной почты\\n\\n"
-        f"Создавайте одноразовые почтовые ящики\\n"
-        f"и получайте сообщения мгновенно.\\n\\n"
-        f"*Быстрый старт:*\\n"
-        f"1. Нажмите 📧 Новая почта\\n"
-        f"2. Скопируйте адрес\\n"
-        f"3. Используйте для регистрации\\n"
-        f"4. Нажмите 📥 Входящие\\n\\n"
-        f"*Команды:*\\n"
-        f"/new — Создать почту\\n"
-        f"/inbox — Проверить письма\\n"
-        f"/set — Установить почту\\n"
-        f"/info — Данные сессии\\n"
-        f"/stats — Статистика\\n"
-        f"/help — Подробная помощь"
-    )
-    bot.send_message(message.chat.id, text, reply_markup=kb)
-    logger.info(f"Пользователь {{message.chat.id}} запустил бота")
+    bot.send_message(m.chat.id,
+        "*{{SERVICE_NAME}}*\\nБот временной почты\\n\\n/new — Создать\\n/inbox — Проверить\\n/set — Установить\\n/info — Данные\\n/help — Помощь",
+        reply_markup=kb)
 
 
 {commands}
 
 
 @bot.callback_query_handler(func=lambda c: True)
-def callback_handler(call: types.CallbackQuery) -> None:
-    cid = call.message.chat.id
-    action = call.data
+def cb(call: types.CallbackQuery) -> None:
+    c = call.message.chat.id
+    a = call.data
     try:
-        if action == "new":
-{cb_new}
-        elif action == "inbox":
-{cb_inbox}
-        elif action == "info":
-            s = get_session(cid)
-            text = (
-                f"*Данные сессии*\\n\\n"
-                f"Почта: `{{s.addr or 'Не установлена'}}`\\n"
-                f"Токен: `{{str(s.token or '')[:20]}}...`\\n"
-                f"Прочитано: {{s.messages}}\\n"
-                f"Уникальных: {{len(s.seen)}}"
-            )
-            bot.answer_callback_query(call.id, text, show_alert=True)
-        elif action == "stats":
-            text = (
-                f"*Статистика бота*\\n\\n"
-                f"Создано почт: {{stats['created']}}\\n"
-                f"Проверок: {{stats['checked']}}\\n"
-                f"Ошибок: {{stats['errors']}}\\n"
-                f"Активных сессий: {{len(sessions)}}"
-            )
-            bot.answer_callback_query(call.id, text, show_alert=True)
-        elif action == "help":
-            bot.send_message(cid, get_help_text())
-        else:
-            bot.answer_callback_query(call.id, "Неизвестное действие")
+        if a == "new": {cb_new}
+        elif a == "inbox": {cb_inbox}
+        elif a == "info":
+            s = get_session(c)
+            bot.answer_callback_query(call.id, f"Почта: {{s.addr or 'Не установлена'}}", show_alert=True)
+        elif a == "stats":
+            bot.answer_callback_query(call.id, f"Создано: {{stats['created']}} | Проверок: {{stats['checked']}}", show_alert=True)
+        elif a == "help":
+            bot.send_message(c, "/new — Создать\\n/inbox — Проверить\\n/set — Установить\\n/info — Данные")
     except Exception as e:
-        logger.error(f"Ошибка callback: {{e}}")
-        bot.answer_callback_query(call.id, "Произошла ошибка")
-
-
-def get_help_text() -> str:
-    return (
-        f"*{{SERVICE_NAME}} — Помощь*\\n\\n"
-        f"*Команды:*\\n"
-        f"/new — Создать почту\\n"
-        f"/inbox — Проверить\\n"
-        f"/set <email> — Установить\\n"
-        f"/read <ID> — Прочитать\\n"
-        f"/key <KEY> — API ключ\\n"
-        f"/info — Данные сессии\\n"
-        f"/stats — Статистика\\n"
-        f"/help — Помощь\\n\\n"
-        f"*Провайдер:* {{SERVICE_NAME}}\\n"
-        f"*API:* `{{BASE_URL}}`"
-    )
+        logger.error(f"Ошибка: {{e}}")
+        bot.answer_callback_query(call.id, "Ошибка")
 
 
 def signal_handler(sig, frame):
-    logger.info("Корректное завершение...")
+    logger.info("Завершение...")
     sys.exit(0)
-
 signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
 
@@ -480,7 +294,7 @@ if __name__ == "__main__":
 '''
 
 # ═══════════════════════════════════════════════════════════════
-# AIogram-2 TEMPLATE (ENGLISH)
+# AIogram-2 ENGLISH
 # ═══════════════════════════════════════════════════════════════
 AIOGRAM2_EN = '''#!/usr/bin/env python3
 """
@@ -497,35 +311,23 @@ Features:
 - Usage statistics
 - Graceful shutdown
 
-Author: Владислав Софронов (cpner)
+Author: Vladislav Sofronov (cpner)
 Contact: feedback@gondon.su | t.me/reejb | gondon.su
 License: MIT
 """
-import asyncio
-import logging
+import asyncio, logging
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils import executor
-import requests
-import random
-import string
-import time
-import os
-import signal
-import sys
+import requests, random, string, time, os, sys
 from typing import Optional, Dict, Any, Set
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("{name}")
 
 BOT_TOKEN: str = os.environ.get("{env_var}", "YOUR_BOT_TOKEN")
 BASE_URL: str = "{base_url}"
 SERVICE_NAME: str = "{name}"
-REQUEST_TIMEOUT: int = 15
-MAX_RETRIES: int = 3
 
 if not BOT_TOKEN or BOT_TOKEN == "YOUR_BOT_TOKEN":
     logger.error("BOT_TOKEN not set!")
@@ -546,28 +348,23 @@ class UserSession:
 sessions: Dict[int, UserSession] = {{}}
 stats: Dict[str, int] = {{"created": 0, "checked": 0, "errors": 0}}
 
-def get_session(user_id: int) -> UserSession:
-    if user_id not in sessions:
-        sessions[user_id] = UserSession()
-    return sessions[user_id]
+def get_session(uid: int) -> UserSession:
+    if uid not in sessions: sessions[uid] = UserSession()
+    return sessions[uid]
 
 def api_get(path: str = "", params: Optional[Dict] = None, headers: Optional[Dict] = None) -> Dict:
     url = f"{{BASE_URL}}{{path}}"
-    for attempt in range(MAX_RETRIES):
-        try:
-            r = requests.get(url, params=params, headers=headers or {{}}, timeout=REQUEST_TIMEOUT)
-            return r.json() if "json" in r.headers.get("content-type", "") else {{"text": r.text[:500]}}
-        except Exception as e:
-            logger.warning(f"API error attempt {{attempt+1}}: {{e}}")
-            if attempt < MAX_RETRIES - 1:
-                time.sleep(1)
-    stats["errors"] += 1
-    return {{"error": "Max retries exceeded"}}
+    try:
+        r = requests.get(url, params=params, headers=headers or {{}}, timeout=15)
+        return r.json() if "json" in r.headers.get("content-type", "") else {{"text": r.text[:500]}}
+    except Exception as e:
+        stats["errors"] += 1
+        return {{"error": str(e)}}
 
 def api_post(path: str = "", data: Optional[Dict] = None, headers: Optional[Dict] = None) -> Dict:
     url = f"{{BASE_URL}}{{path}}"
     try:
-        r = requests.post(url, json=data, headers=headers or {{}}, timeout=REQUEST_TIMEOUT)
+        r = requests.post(url, json=data, headers=headers or {{}}, timeout=15)
         return r.json() if "json" in r.headers.get("content-type", "") else {{"text": r.text[:500]}}
     except Exception as e:
         stats["errors"] += 1
@@ -578,7 +375,7 @@ def gen_name(length: int = 10) -> str:
 
 
 @dp.message_handler(commands=["start", "menu"])
-async def cmd_start(message: types.Message) -> None:
+async def cmd_start(m: types.Message) -> None:
     kb = InlineKeyboardMarkup(row_width=2)
     kb.add(
         InlineKeyboardButton("📧 New Email", callback_data="new"),
@@ -587,51 +384,37 @@ async def cmd_start(message: types.Message) -> None:
         InlineKeyboardButton("📊 Stats", callback_data="stats"),
         InlineKeyboardButton("❓ Help", callback_data="help"),
     )
-    text = (
-        f"*{{SERVICE_NAME}}*\\n"
-        f"Temporary Email Bot\\n\\n"
-        f"Create disposable email addresses\\n"
-        f"and receive messages instantly.\\n\\n"
-        f"*Quick Start:*\\n"
-        f"1. Tap 📧 New Email\\n"
-        f"2. Copy the address\\n"
-        f"3. Use it for registration\\n"
-        f"4. Tap 📥 Inbox to check"
-    )
-    await message.answer(text, reply_markup=kb)
+    await m.answer("*{{SERVICE_NAME}}*\\nTemporary Email Bot\\n\\n/new — Create\\n/inbox — Check\\n/info — Info", reply_markup=kb)
 
 
 {commands}
 
 
 @dp.callback_query_handler(lambda c: True)
-async def callback_handler(call: types.CallbackQuery) -> None:
-    cid = call.message.chat.id
-    action = call.data
+async def cb(call: types.CallbackQuery) -> None:
+    c = call.message.chat.id
+    a = call.data
     try:
-        if action == "new":
-{cb_new}
-        elif action == "inbox":
-{cb_inbox}
-        elif action == "info":
-            s = get_session(cid)
+        if a == "new": {cb_new}
+        elif a == "inbox": {cb_inbox}
+        elif a == "info":
+            s = get_session(c)
             await call.answer(f"Email: {{s.addr or 'Not set'}}", show_alert=True)
-        elif action == "stats":
+        elif a == "stats":
             await call.answer(f"Created: {{stats['created']}} | Checked: {{stats['checked']}}", show_alert=True)
-        elif action == "help":
-            await bot.send_message(cid, "/new — Create\\n/inbox — Check\\n/info — Info")
+        elif a == "help":
+            await bot.send_message(c, "/new — Create\\n/inbox — Check\\n/info — Info")
     except Exception as e:
-        logger.error(f"Callback error: {{e}}")
-        await call.answer("Error occurred")
-
+        logger.error(f"Error: {{e}}")
+        await call.answer("Error")
 
 if __name__ == "__main__":
-    logger.info(f"Starting {{SERVICE_NAME}} Bot...")
+    logger.info(f"Starting {{SERVICE_NAME}}...")
     executor.start_polling(dp, skip_updates=True)
 '''
 
 # ═══════════════════════════════════════════════════════════════
-# AIogram-2 TEMPLATE (RUSSIAN)
+# AIogram-2 RUSSIAN
 # ═══════════════════════════════════════════════════════════════
 AIOGRAM2_RU = '''#!/usr/bin/env python3
 """
@@ -648,20 +431,15 @@ AIOGRAM2_RU = '''#!/usr/bin/env python3
 - Статистика использования
 - Корректное завершение
 
-Автор: Temp Email Bots Project
+Автор: Владислав Софронов (cpner)
+Контакт: feedback@gondon.su | t.me/reejb | gondon.su
 Лицензия: MIT
 """
-import asyncio
-import logging
+import asyncio, logging
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils import executor
-import requests
-import random
-import string
-import time
-import os
-import sys
+import requests, random, string, time, os, sys
 from typing import Optional, Dict, Any, Set
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -690,10 +468,9 @@ class UserSession:
 sessions: Dict[int, UserSession] = {{}}
 stats: Dict[str, int] = {{"created": 0, "checked": 0, "errors": 0}}
 
-def get_session(user_id: int) -> UserSession:
-    if user_id not in sessions:
-        sessions[user_id] = UserSession()
-    return sessions[user_id]
+def get_session(uid: int) -> UserSession:
+    if uid not in sessions: sessions[uid] = UserSession()
+    return sessions[uid]
 
 def api_get(path: str = "", params: Optional[Dict] = None, headers: Optional[Dict] = None) -> Dict:
     url = f"{{BASE_URL}}{{path}}"
@@ -718,7 +495,7 @@ def gen_name(length: int = 10) -> str:
 
 
 @dp.message_handler(commands=["start", "menu"])
-async def cmd_start(message: types.Message) -> None:
+async def cmd_start(m: types.Message) -> None:
     kb = InlineKeyboardMarkup(row_width=2)
     kb.add(
         InlineKeyboardButton("📧 Новая почта", callback_data="new"),
@@ -727,35 +504,29 @@ async def cmd_start(message: types.Message) -> None:
         InlineKeyboardButton("📊 Статистика", callback_data="stats"),
         InlineKeyboardButton("❓ Помощь", callback_data="help"),
     )
-    await message.answer(
-        f"*{{SERVICE_NAME}}*\\nБот временной почты\\n\\n/new — Создать\\n/inbox — Проверить\\n/info — Данные",
-        reply_markup=kb
-    )
+    await m.answer("*{{SERVICE_NAME}}*\\nБот временной почты\\n\\n/new — Создать\\n/inbox — Проверить\\n/info — Данные", reply_markup=kb)
 
 
 {commands}
 
 
 @dp.callback_query_handler(lambda c: True)
-async def callback_handler(call: types.CallbackQuery) -> None:
-    cid = call.message.chat.id
-    action = call.data
+async def cb(call: types.CallbackQuery) -> None:
+    c = call.message.chat.id
+    a = call.data
     try:
-        if action == "new":
-{cb_new}
-        elif action == "inbox":
-{cb_inbox}
-        elif action == "info":
-            s = get_session(cid)
+        if a == "new": {cb_new}
+        elif a == "inbox": {cb_inbox}
+        elif a == "info":
+            s = get_session(c)
             await call.answer(f"Почта: {{s.addr or 'Не установлена'}}", show_alert=True)
-        elif action == "stats":
+        elif a == "stats":
             await call.answer(f"Создано: {{stats['created']}} | Проверок: {{stats['checked']}}", show_alert=True)
-        elif action == "help":
-            await bot.send_message(cid, "/new — Создать\\n/inbox — Проверить\\n/info — Данные")
+        elif a == "help":
+            await bot.send_message(c, "/new — Создать\\n/inbox — Проверить\\n/info — Данные")
     except Exception as e:
         logger.error(f"Ошибка: {{e}}")
         await call.answer("Ошибка")
-
 
 if __name__ == "__main__":
     logger.info(f"Запуск {{SERVICE_NAME}}...")
@@ -763,7 +534,7 @@ if __name__ == "__main__":
 '''
 
 # ═══════════════════════════════════════════════════════════════
-# AIogram-3 TEMPLATE (ENGLISH)
+# AIogram-3 ENGLISH
 # ═══════════════════════════════════════════════════════════════
 AIOGRAM3_EN = '''#!/usr/bin/env python3
 """
@@ -780,20 +551,14 @@ Features:
 - Usage statistics
 - Graceful shutdown
 
-Author: Владислав Софронов (cpner)
+Author: Vladislav Sofronov (cpner)
 Contact: feedback@gondon.su | t.me/reejb | gondon.su
 License: MIT
 """
-import asyncio
-import logging
+import asyncio, logging
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-import requests
-import random
-import string
-import time
-import os
-import sys
+import requests, random, string, time, os, sys
 from typing import Optional, Dict, Any, Set
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -822,10 +587,9 @@ class UserSession:
 sessions: Dict[int, UserSession] = {{}}
 stats: Dict[str, int] = {{"created": 0, "checked": 0, "errors": 0}}
 
-def get_session(user_id: int) -> UserSession:
-    if user_id not in sessions:
-        sessions[user_id] = UserSession()
-    return sessions[user_id]
+def get_session(uid: int) -> UserSession:
+    if uid not in sessions: sessions[uid] = UserSession()
+    return sessions[uid]
 
 def api_get(path: str = "", params: Optional[Dict] = None, headers: Optional[Dict] = None) -> Dict:
     url = f"{{BASE_URL}}{{path}}"
@@ -850,7 +614,7 @@ def gen_name(length: int = 10) -> str:
 
 
 @dp.message(F.text.in_{{"/start", "/menu"}})
-async def cmd_start(message: types.Message) -> None:
+async def cmd_start(m: types.Message) -> None:
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📧 New Email", callback_data="new"),
          InlineKeyboardButton(text="📥 Inbox", callback_data="inbox")],
@@ -858,10 +622,7 @@ async def cmd_start(message: types.Message) -> None:
          InlineKeyboardButton(text="📊 Stats", callback_data="stats")],
         [InlineKeyboardButton(text="❓ Help", callback_data="help")],
     ])
-    await message.answer(
-        f"*{{SERVICE_NAME}}*\\nTemporary Email Bot\\n\\n/new — Create\\n/inbox — Check\\n/info — Info",
-        reply_markup=kb
-    )
+    await m.answer("*{{SERVICE_NAME}}*\\nTemporary Email Bot\\n\\n/new — Create\\n/inbox — Check\\n/info — Info", reply_markup=kb)
 
 
 {commands}
@@ -890,16 +651,15 @@ async def cb_help_handler(call: types.CallbackQuery) -> None:
 
 
 async def main() -> None:
-    logger.info(f"Starting {{SERVICE_NAME}} Bot...")
+    logger.info(f"Starting {{SERVICE_NAME}}...")
     await dp.start_polling(bot)
-
 
 if __name__ == "__main__":
     asyncio.run(main())
 '''
 
 # ═══════════════════════════════════════════════════════════════
-# AIogram-3 TEMPLATE (RUSSIAN)
+# AIogram-3 RUSSIAN
 # ═══════════════════════════════════════════════════════════════
 AIOGRAM3_RU = '''#!/usr/bin/env python3
 """
@@ -916,19 +676,14 @@ AIOGRAM3_RU = '''#!/usr/bin/env python3
 - Статистика использования
 - Корректное завершение
 
-Автор: Temp Email Bots Project
+Автор: Владислав Софронов (cpner)
+Контакт: feedback@gondon.su | t.me/reejb | gondon.su
 Лицензия: MIT
 """
-import asyncio
-import logging
+import asyncio, logging
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-import requests
-import random
-import string
-import time
-import os
-import sys
+import requests, random, string, time, os, sys
 from typing import Optional, Dict, Any, Set
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -957,10 +712,9 @@ class UserSession:
 sessions: Dict[int, UserSession] = {{}}
 stats: Dict[str, int] = {{"created": 0, "checked": 0, "errors": 0}}
 
-def get_session(user_id: int) -> UserSession:
-    if user_id not in sessions:
-        sessions[user_id] = UserSession()
-    return sessions[user_id]
+def get_session(uid: int) -> UserSession:
+    if uid not in sessions: sessions[uid] = UserSession()
+    return sessions[uid]
 
 def api_get(path: str = "", params: Optional[Dict] = None, headers: Optional[Dict] = None) -> Dict:
     url = f"{{BASE_URL}}{{path}}"
@@ -985,7 +739,7 @@ def gen_name(length: int = 10) -> str:
 
 
 @dp.message(F.text.in_{{"/start", "/menu"}})
-async def cmd_start(message: types.Message) -> None:
+async def cmd_start(m: types.Message) -> None:
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📧 Новая почта", callback_data="new"),
          InlineKeyboardButton(text="📥 Входящие", callback_data="inbox")],
@@ -993,10 +747,7 @@ async def cmd_start(message: types.Message) -> None:
          InlineKeyboardButton(text="📊 Статистика", callback_data="stats")],
         [InlineKeyboardButton(text="❓ Помощь", callback_data="help")],
     ])
-    await message.answer(
-        f"*{{SERVICE_NAME}}*\\nБот временной почты\\n\\n/new — Создать\\n/inbox — Проверить\\n/info — Данные",
-        reply_markup=kb
-    )
+    await m.answer("*{{SERVICE_NAME}}*\\nБот временной почты\\n\\n/new — Создать\\n/inbox — Проверить\\n/info — Данные", reply_markup=kb)
 
 
 {commands}
@@ -1028,490 +779,273 @@ async def main() -> None:
     logger.info(f"Запуск {{SERVICE_NAME}}...")
     await dp.start_polling(bot)
 
-
 if __name__ == "__main__":
     asyncio.run(main())
 '''
 
 # ═══════════════════════════════════════════════════════════════
-# SERVICE-SPECIFIC COMMANDS
+# SERVICE COMMANDS
 # ═══════════════════════════════════════════════════════════════
-SERVICE_COMMANDS = {
+CMDS = {
     "guerrilla": {
-        "commands_en": '''@bot.message_handler(commands=["new"])
-def cmd_new(message: types.Message) -> None:
-    cid = message.chat.id
-    s = get_session(cid)
+        "en": '''@bot.message_handler(commands=["new"])
+def cmd_new(m: types.Message) -> None:
+    c = m.chat.id
+    s = get_session(c)
     r = api_get(params={{"f": "get_email_address", "ip": "127.0.0.1", "agent": "Mozilla"}})
     if "email_addr" in r:
-        s.addr = r["email_addr"]
-        s.token = r.get("sid_token")
-        s.seen = set()
-        s.ts = time.time()
+        s.addr, s.token, s.seen, s.ts = r["email_addr"], r.get("sid_token"), set(), time.time()
         stats["created"] += 1
-        text = (
-            f"*Email Created*\\n\\n"
-            f"Address: `{r['email_addr']}`\\n"
-            f"SID: `{str(r.get('sid_token', ''))[:16]}...`\\n\\n"
-            f"Copy this address and use it for registrations."
-        )
-        bot.send_message(cid, text)
-    else:
-        bot.send_message(cid, "❌ Failed to create email. Try /new again.")
-
+        bot.send_message(c, f"✅ Created: `{r['email_addr']}`\\n\\nCopy and use for registrations.")
+    else: bot.send_message(c, "❌ Failed. Try /new")
 
 @bot.message_handler(commands=["inbox"])
-def cmd_inbox(message: types.Message) -> None:
-    cid = message.chat.id
-    s = get_session(cid)
-    if not s.token:
-        return bot.send_message(cid, "❌ Create an email first: /new")
+def cmd_inbox(m: types.Message) -> None:
+    c = m.chat.id
+    s = get_session(c)
+    if not s.token: return bot.send_message(c, "❌ /new first")
     r = api_get(params={{"f": "check_email", "sid_token": s.token, "seq": 0}})
-    msgs = r.get("list", [])
-    stats["checked"] += 1
-    if not msgs:
-        return bot.send_message(cid, "📭 Inbox is empty.")
-    text = f"*{len(msgs)} messages*\\n\\n"
-    for m in msgs[:15]:
-        mid = m.get("mail_id", "?")
-        marker = "🆕 " if mid not in s.seen else ""
-        s.seen.add(mid)
-        text += f"{marker}`{mid}` — {m.get('mail_from', '?')}\\nSubject: {m.get('mail_subject', '—')}\\n\\n"
-    bot.send_message(cid, text)
-
+    msgs, stats["checked"] = r.get("list", []), stats["checked"] + 1
+    if not msgs: return bot.send_message(c, "📭 Empty")
+    t = f"*{len(msgs)} messages*\\n\\n"
+    for x in msgs[:15]:
+        n = "🆕 " if x.get("mail_id") not in s.seen else ""
+        s.seen.add(x.get("mail_id"))
+        t += f"{n}`{x.get('mail_id')}` — {x.get('mail_from','?')}\\n{x.get('mail_subject','—')}\\n\\n"
+    bot.send_message(c, t)
 
 @bot.message_handler(commands=["set"])
-def cmd_set(message: types.Message) -> None:
-    parts = message.text.split(maxsplit=1)
-    if len(parts) < 2:
-        return bot.send_message(message.chat.id, "Usage: /set <username>")
-    s = get_session(message.chat.id)
-    if not s.token:
-        return bot.send_message(message.chat.id, "❌ Create email first: /new")
-    r = api_get(params={{"f": "set_email_user", "sid_token": s.token, "email_user": parts[1].strip()}})
-    if "email_addr" in r:
-        s.addr = r["email_addr"]
-        bot.send_message(message.chat.id, f"✅ Email updated: `{r['email_addr']}`")
-
-
-@bot.message_handler(commands=["domains"])
-def cmd_domains(message: types.Message) -> None:
-    langs = ["en", "ru", "de", "fr", "es", "it", "pt", "ja", "zh"]
-    text = "*Available Languages:*\\n" + "\\n".join(f"• `{l}`" for l in langs)
-    bot.send_message(message.chat.id, text)
-
-
-@bot.message_handler(commands=["setlang"])
-def cmd_setlang(message: types.Message) -> None:
-    parts = message.text.split(maxsplit=1)
-    if len(parts) < 2:
-        return bot.send_message(message.chat.id, "Usage: /setlang <code>")
-    r = api_get(params={{"f": "change_lang", "lang": parts[1].strip()}})
-    lang = r.get("lang", parts[1].strip())
-    bot.send_message(message.chat.id, f"✅ Language: `{lang}`")
-
-
-@bot.message_handler(commands=["ip"])
-def cmd_ip(message: types.Message) -> None:
-    r = api_get(params={{"f": "get_ip"}})
-    ip = r.get("ip_addr", "?")
-    bot.send_message(message.chat.id, f"🌐 IP: `{ip}`")
-
-
-@bot.message_handler(commands=["lang"])
-def cmd_lang(message: types.Message) -> None:
-    r = api_get(params={{"f": "get_lang"}})
-    lang = r.get("lang", "?")
-    bot.send_message(message.chat.id, f"🌐 Language: `{lang}`")
-
+def cmd_set(m: types.Message) -> None:
+    p = m.text.split(maxsplit=1)
+    if len(p) < 2: return bot.send_message(m.chat.id, "Usage: /set <username>")
+    s = get_session(m.chat.id)
+    if not s.token: return bot.send_message(m.chat.id, "❌ /new first")
+    r = api_get(params={{"f": "set_email_user", "sid_token": s.token, "email_user": p[1].strip()}})
+    if "email_addr" in r: s.addr = r["email_addr"]; bot.send_message(m.chat.id, f"✅ `{r['email_addr']}`")
 
 @bot.message_handler(commands=["info"])
-def cmd_info(message: types.Message) -> None:
-    s = get_session(message.chat.id)
-    text = f"📧 {s.addr or 'Not set'}\\n📩 Read: {s.messages} | Seen: {len(s.seen)}"
-    bot.send_message(message.chat.id, text)
-
-
-@bot.message_handler(commands=["stats"])
-def cmd_stats(message: types.Message) -> None:
-    text = f"*Stats:* Created: {stats['created']} | Checked: {stats['checked']} | Errors: {stats['errors']}"
-    bot.send_message(message.chat.id, text)''',
-        "cb_new_en": '''        r = api_get(params={{"f": "get_email_address", "ip": "127.0.0.1", "agent": "Mozilla"}})
+def cmd_info(m: types.Message) -> None:
+    s = get_session(m.chat.id)
+    bot.send_message(m.chat.id, f"📧 {s.addr or 'Not set'}\\n📩 Seen: {len(s.seen)}")''',
+        "cb_new": '''r = api_get(params={{"f": "get_email_address", "ip": "127.0.0.1", "agent": "Mozilla"}})
         if "email_addr" in r:
-            s = get_session(cid)
-            s.addr = r["email_addr"]
-            s.token = r.get("sid_token")
-            s.seen = set()
-            s.ts = time.time()
+            s = get_session(c); s.addr, s.token, s.seen, s.ts = r["email_addr"], r.get("sid_token"), set(), time.time()
             stats["created"] += 1
-            bot.edit_message_text(f"✅ Created: `{r['email_addr']}`", cid, call.message.message_id)''',
-        "cb_inbox_en": '''        s = get_session(cid)
-        if not s.token:
-            return bot.answer_callback_query(call.id, "❌ Create email first")
+            bot.edit_message_text(f"✅ Created: `{r['email_addr']}`", c, call.message.message_id)''',
+        "cb_inbox": '''s = get_session(c)
+        if not s.token: return bot.answer_callback_query(call.id, "❌ /new first")
         r = api_get(params={{"f": "check_email", "sid_token": s.token, "seq": 0}})
-        msgs = r.get("list", [])
-        stats["checked"] += 1
-        if not msgs:
-            bot.edit_message_text("📭 Empty", cid, call.message.message_id)
+        msgs = r.get("list", []); stats["checked"] += 1
+        if not msgs: bot.edit_message_text("📭 Empty", c, call.message.message_id)
         else:
-            txt = f"{len(msgs)} messages:\\n\\n"
-            for m in msgs[:10]:
-                s.seen.add(m.get("mail_id"))
-                txt += f"`{m.get('mail_id')}` — {m.get('mail_from','?')}\\n{m.get('mail_subject','—')}\\n\\n"
-            bot.edit_message_text(txt, cid, call.message.message_id)''',
-        "commands_ru": '''@bot.message_handler(commands=["new"])
-def cmd_new(message: types.Message) -> None:
-    cid = message.chat.id
-    s = get_session(cid)
+            txt = ""
+            for x in msgs[:10]: s.seen.add(x.get("mail_id")); txt += f"`{x.get('mail_id')}` — {x.get('mail_from','?')}\\n{x.get('mail_subject','—')}\\n\\n"
+            bot.edit_message_text(f"{len(msgs)} messages:\\n\\n" + txt, c, call.message.message_id)''',
+        "ru": '''@bot.message_handler(commands=["new"])
+def cmd_new(m: types.Message) -> None:
+    c = m.chat.id
+    s = get_session(c)
     r = api_get(params={{"f": "get_email_address", "ip": "127.0.0.1", "agent": "Mozilla"}})
     if "email_addr" in r:
-        s.addr = r["email_addr"]
-        s.token = r.get("sid_token")
-        s.seen = set()
+        s.addr, s.token, s.seen, s.ts = r["email_addr"], r.get("sid_token"), set(), time.time()
         stats["created"] += 1
-        bot.send_message(cid, f"✅ `{r['email_addr']}`\\n\\nСкопируйте адрес и используйте для регистраций.")
-
+        bot.send_message(c, f"✅ `{r['email_addr']}`\\n\\nСкопируйте и используйте для регистраций.")
+    else: bot.send_message(c, "❌ Ошибка. Попробуйте /new")
 
 @bot.message_handler(commands=["inbox"])
-def cmd_inbox(message: types.Message) -> None:
-    cid = message.chat.id
-    s = get_session(cid)
-    if not s.token:
-        return bot.send_message(cid, "❌ Сначала /new")
+def cmd_inbox(m: types.Message) -> None:
+    c = m.chat.id
+    s = get_session(c)
+    if not s.token: return bot.send_message(c, "❌ /new")
     r = api_get(params={{"f": "check_email", "sid_token": s.token, "seq": 0}})
-    msgs = r.get("list", [])
-    stats["checked"] += 1
-    if not msgs:
-        return bot.send_message(cid, "📭 Пусто")
+    msgs, stats["checked"] = r.get("list", []), stats["checked"] + 1
+    if not msgs: return bot.send_message(c, "📭 Пусто")
     t = f"*{len(msgs)} писем*\\n\\n"
-    for m in msgs[:15]:
-        n = "🆕 " if m.get("mail_id") not in s.seen else ""
-        s.seen.add(m.get("mail_id"))
-        t += f"{n}`{m.get('mail_id')}` — {m.get('mail_from','?')}\\n{m.get('mail_subject','—')}\\n\\n"
-    bot.send_message(cid, t)
-
-
-@bot.message_handler(commands=["set"])
-def cmd_set(message: types.Message) -> None:
-    parts = message.text.split(maxsplit=1)
-    if len(parts) < 2:
-        return bot.send_message(message.chat.id, "/set <имя>")
-    s = get_session(message.chat.id)
-    if not s.token:
-        return bot.send_message(message.chat.id, "❌ /new")
-    r = api_get(params={{"f": "set_email_user", "sid_token": s.token, "email_user": parts[1].strip()}})
-    if "email_addr" in r:
-        s.addr = r["email_addr"]
-        bot.send_message(message.chat.id, f"✅ `{r['email_addr']}`")
-
+    for x in msgs[:15]:
+        n = "🆕 " if x.get("mail_id") not in s.seen else ""
+        s.seen.add(x.get("mail_id"))
+        t += f"{n}`{x.get('mail_id')}` — {x.get('mail_from','?')}\\n{x.get('mail_subject','—')}\\n\\n"
+    bot.send_message(c, t)
 
 @bot.message_handler(commands=["info"])
-def cmd_info(message: types.Message) -> None:
-    s = get_session(message.chat.id)
-    bot.send_message(message.chat.id, f"📧 {s.addr or '—'}\\n📩 {len(s.seen)}")''',
-        "cb_new_ru": '''        r = api_get(params={{"f": "get_email_address", "ip": "127.0.0.1", "agent": "Mozilla"}})
+def cmd_info(m: types.Message) -> None:
+    s = get_session(m.chat.id)
+    bot.send_message(m.chat.id, f"📧 {s.addr or '—'}\\n📩 {len(s.seen)}")''',
+        "cb_new_ru": '''r = api_get(params={{"f": "get_email_address", "ip": "127.0.0.1", "agent": "Mozilla"}})
         if "email_addr" in r:
-            s = get_session(cid)
-            s.addr = r["email_addr"]
-            s.token = r.get("sid_token")
-            s.seen = set()
+            s = get_session(c); s.addr, s.token, s.seen, s.ts = r["email_addr"], r.get("sid_token"), set(), time.time()
             stats["created"] += 1
-            bot.edit_message_text(f"✅ `{r['email_addr']}`", cid, call.message.message_id)''',
-        "cb_inbox_ru": '''        s = get_session(cid)
-        if not s.token:
-            return bot.answer_callback_query(call.id, "❌ /new")
+            bot.edit_message_text(f"✅ `{r['email_addr']}`", c, call.message.message_id)''',
+        "cb_inbox_ru": '''s = get_session(c)
+        if not s.token: return bot.answer_callback_query(call.id, "❌ /new")
         r = api_get(params={{"f": "check_email", "sid_token": s.token, "seq": 0}})
-        msgs = r.get("list", [])
-        stats["checked"] += 1
-        if not msgs:
-            bot.edit_message_text("📭 Пусто", cid, call.message.message_id)
+        msgs = r.get("list", []); stats["checked"] += 1
+        if not msgs: bot.edit_message_text("📭 Пусто", c, call.message.message_id)
         else:
-            txt = f"{len(msgs)} писем:\\n\\n"
-            for m in msgs[:10]:
-                s.seen.add(m.get("mail_id"))
-                txt += f"`{m.get('mail_id')}` — {m.get('mail_from','?')}\\n{m.get('mail_subject','—')}\\n\\n"
-            bot.edit_message_text(txt, cid, call.message.message_id)''',
+            txt = ""
+            for x in msgs[:10]: s.seen.add(x.get("mail_id")); txt += f"`{x.get('mail_id')}` — {x.get('mail_from','?')}\\n{x.get('mail_subject','—')}\\n\\n"
+            bot.edit_message_text(f"{len(msgs)} писем:\\n\\n" + txt, c, call.message.message_id)''',
     },
     "tempmail_plus": {
-        "commands_en": '''@bot.message_handler(commands=["set"])
-def cmd_set(message: types.Message) -> None:
-    parts = message.text.split(maxsplit=1)
-    if len(parts) < 2:
-        return bot.send_message(message.chat.id, "Usage: /set email@domain.com")
-    s = get_session(message.chat.id)
-    s.addr = parts[1].strip()
-    s.seen = set()
-    bot.send_message(message.chat.id, f"✅ Monitoring: `{s.addr}`")
-
+        "en": '''@bot.message_handler(commands=["set"])
+def cmd_set(m: types.Message) -> None:
+    p = m.text.split(maxsplit=1)
+    if len(p) < 2: return bot.send_message(m.chat.id, "Usage: /set email@domain.com")
+    s = get_session(m.chat.id); s.addr, s.seen = p[1].strip(), set()
+    bot.send_message(m.chat.id, f"✅ Monitoring: `{s.addr}`")
 
 @bot.message_handler(commands=["inbox"])
-def cmd_inbox(message: types.Message) -> None:
-    cid = message.chat.id
-    s = get_session(cid)
-    if not s.addr:
-        return bot.send_message(cid, "❌ Set email first: /set email@domain.com")
-    r = api_get(params={{"email": s.addr}})
-    mails = r.get("mail", [])
-    stats["checked"] += 1
-    if not mails:
-        return bot.send_message(cid, "📭 Inbox empty")
-    text = f"*{len(mails)} messages*\\n\\n"
-    for m in mails[:15]:
-        n = "🆕 " if m.get("mail_id") not in s.seen else ""
-        s.seen.add(m.get("mail_id"))
-        text += f"{n}`{m.get('mail_id')}` — {m.get('mail_from','?')}\\n{m.get('mail_subject','—')}\\n\\n"
-    bot.send_message(cid, text)
-
-
-@bot.message_handler(commands=["domains"])
-def cmd_domains(message: types.Message) -> None:
-    doms = ["gmail.com","yahoo.com","outlook.com","hotmail.com","protonmail.com","aol.com",
-            "zoho.com","gmx.com","mail.com","yandex.com","icloud.com","1secmail.com","mailinator.com"]
-    text = "*Supported Domains:*\\n\\n" + "\\n".join(f"• `{d}`" for d in doms)
-    bot.send_message(message.chat.id, text)''',
-        "cb_new_en": '''        bot.send_message(cid, "Use /set email@domain.com to start monitoring.")''',
-        "cb_inbox_en": '''        s = get_session(cid)
-        if not s.addr:
-            return bot.answer_callback_query(call.id, "❌ /set email first")
-        r = api_get(params={{"email": s.addr}})
-        mails = r.get("mail", [])
-        stats["checked"] += 1
-        if not mails:
-            bot.edit_message_text("📭 Empty", cid, call.message.message_id)
+def cmd_inbox(m: types.Message) -> None:
+    c = m.chat.id
+    s = get_session(c)
+    if not s.addr: return bot.send_message(c, "❌ /set email@domain.com")
+    r = api_get(params={{"email": s.addr}}); mails = r.get("mail", []); stats["checked"] += 1
+    if not mails: return bot.send_message(c, "📭 Empty")
+    t = f"*{len(mails)} messages*\\n\\n"
+    for x in mails[:15]:
+        n = "🆕 " if x.get("mail_id") not in s.seen else ""; s.seen.add(x.get("mail_id"))
+        t += f"{n}`{x.get('mail_id')}` — {x.get('mail_from','?')}\\n{x.get('mail_subject','—')}\\n\\n"
+    bot.send_message(c, t)''',
+        "cb_new": '''bot.send_message(cid, "Use /set email@domain.com")''',
+        "cb_inbox": '''s = get_session(c)
+        if not s.addr: return bot.answer_callback_query(call.id, "❌ /set email first")
+        r = api_get(params={{"email": s.addr}}); mails = r.get("mail", []); stats["checked"] += 1
+        if not mails: bot.edit_message_text("📭 Empty", c, call.message.message_id)
         else:
-            txt = f"{len(mails)} messages:\\n\\n"
-            for m in mails[:10]:
-                s.seen.add(m.get("mail_id"))
-                txt += f"`{m.get('mail_id')}` — {m.get('mail_from','?')}\\n{m.get('mail_subject','—')}\\n\\n"
-            bot.edit_message_text(txt, cid, call.message.message_id)''',
-        "commands_ru": '''@bot.message_handler(commands=["set"])
-def cmd_set(message: types.Message) -> None:
-    parts = message.text.split(maxsplit=1)
-    if len(parts) < 2:
-        return bot.send_message(message.chat.id, "/set email@domain.com")
-    s = get_session(message.chat.id)
-    s.addr = parts[1].strip()
-    s.seen = set()
-    bot.send_message(message.chat.id, f"✅ Мониторинг: `{s.addr}`")
-
+            txt = ""
+            for x in mails[:10]: s.seen.add(x.get("mail_id")); txt += f"`{x.get('mail_id')}` — {x.get('mail_from','?')}\\n{x.get('mail_subject','—')}\\n\\n"
+            bot.edit_message_text(f"{len(mails)} messages:\\n\\n" + txt, c, call.message.message_id)''',
+        "ru": '''@bot.message_handler(commands=["set"])
+def cmd_set(m: types.Message) -> None:
+    p = m.text.split(maxsplit=1)
+    if len(p) < 2: return bot.send_message(m.chat.id, "/set email@domain.com")
+    s = get_session(m.chat.id); s.addr, s.seen = p[1].strip(), set()
+    bot.send_message(m.chat.id, f"✅ Мониторинг: `{s.addr}`")
 
 @bot.message_handler(commands=["inbox"])
-def cmd_inbox(message: types.Message) -> None:
-    cid = message.chat.id
-    s = get_session(cid)
-    if not s.addr:
-        return bot.send_message(cid, "❌ /set email@domain.com")
-    r = api_get(params={{"email": s.addr}})
-    mails = r.get("mail", [])
-    stats["checked"] += 1
-    if not mails:
-        return bot.send_message(cid, "📭 Пусто")
+def cmd_inbox(m: types.Message) -> None:
+    c = m.chat.id
+    s = get_session(c)
+    if not s.addr: return bot.send_message(c, "❌ /set email@domain.com")
+    r = api_get(params={{"email": s.addr}}); mails = r.get("mail", []); stats["checked"] += 1
+    if not mails: return bot.send_message(c, "📭 Пусто")
     t = f"*{len(mails)} писем*\\n\\n"
-    for m in mails[:15]:
-        n = "🆕 " if m.get("mail_id") not in s.seen else ""
-        s.seen.add(m.get("mail_id"))
-        t += f"{n}`{m.get('mail_id')}` — {m.get('mail_from','?')}\\n{m.get('mail_subject','—')}\\n\\n"
-    bot.send_message(cid, t)''',
-        "cb_new_ru": '''        bot.send_message(cid, "/set email@domain.com")''',
-        "cb_inbox_ru": '''        s = get_session(cid)
-        if not s.addr:
-            return bot.answer_callback_query(call.id, "❌ /set email")
-        r = api_get(params={{"email": s.addr}})
-        mails = r.get("mail", [])
-        stats["checked"] += 1
-        if not mails:
-            bot.edit_message_text("📭 Пусто", cid, call.message.message_id)
+    for x in mails[:15]:
+        n = "🆕 " if x.get("mail_id") not in s.seen else ""; s.seen.add(x.get("mail_id"))
+        t += f"{n}`{x.get('mail_id')}` — {x.get('mail_from','?')}\\n{x.get('mail_subject','—')}\\n\\n"
+    bot.send_message(c, t)''',
+        "cb_new_ru": '''bot.send_message(cid, "/set email@domain.com")''',
+        "cb_inbox_ru": '''s = get_session(c)
+        if not s.addr: return bot.answer_callback_query(call.id, "❌ /set email")
+        r = api_get(params={{"email": s.addr}}); mails = r.get("mail", []); stats["checked"] += 1
+        if not mails: bot.edit_message_text("📭 Пусто", c, call.message.message_id)
         else:
-            txt = f"{len(mails)} писем:\\n\\n"
-            for m in mails[:10]:
-                s.seen.add(m.get("mail_id"))
-                txt += f"`{m.get('mail_id')}` — {m.get('mail_from','?')}\\n{m.get('mail_subject','—')}\\n\\n"
-            bot.edit_message_text(txt, cid, call.message.message_id)''',
+            txt = ""
+            for x in mails[:10]: s.seen.add(x.get("mail_id")); txt += f"`{x.get('mail_id')}` — {x.get('mail_from','?')}\\n{x.get('mail_subject','—')}\\n\\n"
+            bot.edit_message_text(f"{len(mails)} писем:\\n\\n" + txt, c, call.message.message_id)''',
     },
     "tempmail_lol": {
-        "commands_en": '''@bot.message_handler(commands=["new"])
-def cmd_new(message: types.Message) -> None:
-    cid = message.chat.id
-    s = get_session(cid)
+        "en": '''@bot.message_handler(commands=["new"])
+def cmd_new(m: types.Message) -> None:
+    c = m.chat.id
+    s = get_session(c)
     r = api_get("/generate")
     if "address" in r:
-        s.addr = r["address"]
-        s.token = r.get("token")
-        s.seen = set()
+        s.addr, s.token, s.seen = r["address"], r.get("token"), set()
         stats["created"] += 1
-        bot.send_message(cid, f"✅ `{r['address']}`\\nToken: `{str(r.get('token',''))[:20]}...`")
-    else:
-        bot.send_message(cid, "❌ Failed to generate email.")
-
+        bot.send_message(c, f"✅ `{r['address']}`\\nToken: `{str(r.get('token',''))[:20]}...`")
+    else: bot.send_message(c, "❌ Failed")
 
 @bot.message_handler(commands=["inbox"])
-def cmd_inbox(message: types.Message) -> None:
-    cid = message.chat.id
-    s = get_session(cid)
-    if not s.token:
-        return bot.send_message(cid, "❌ Create email first: /new")
-    r = api_get(f"/auth/{s.token}")
-    emails = r.get("email", [])
-    stats["checked"] += 1
-    if not emails:
-        return bot.send_message(cid, "📭 Inbox empty")
-    text = f"*{len(emails)} messages*\\n\\n"
+def cmd_inbox(m: types.Message) -> None:
+    c = m.chat.id
+    s = get_session(c)
+    if not s.token: return bot.send_message(c, "❌ /new first")
+    r = api_get(f"/auth/{s.token}"); emails = r.get("email", []); stats["checked"] += 1
+    if not emails: return bot.send_message(c, "📭 Empty")
+    t = f"*{len(emails)} messages*\\n\\n"
     for e in emails[:15]:
-        n = "🆕 " if e.get("id") not in s.seen else ""
-        s.seen.add(e.get("id"))
-        text += f"{n}`{e.get('id')}` — {e.get('from','?')}\\n{e.get('subject','—')}\\n\\n"
-    bot.send_message(cid, text)''',
-        "cb_new_en": '''        r = api_get("/generate")
+        n = "🆕 " if e.get("id") not in s.seen else ""; s.seen.add(e.get("id"))
+        t += f"{n}`{e.get('id')}` — {e.get('from','?')}\\n{e.get('subject','—')}\\n\\n"
+    bot.send_message(c, t)''',
+        "cb_new": '''r = api_get("/generate")
         if "address" in r:
-            s = get_session(cid)
-            s.addr = r["address"]
-            s.token = r.get("token")
-            s.seen = set()
+            s = get_session(c); s.addr, s.token, s.seen = r["address"], r.get("token"), set()
             stats["created"] += 1
-            bot.edit_message_text(f"✅ `{r['address']}`", cid, call.message.message_id)''',
-        "cb_inbox_en": '''        s = get_session(cid)
-        if not s.token:
-            return bot.answer_callback_query(call.id, "❌ /new first")
-        r = api_get(f"/auth/{s.token}")
-        emails = r.get("email", [])
-        stats["checked"] += 1
-        if not emails:
-            bot.edit_message_text("📭 Empty", cid, call.message.message_id)
+            bot.edit_message_text(f"✅ `{r['address']}`", c, call.message.message_id)''',
+        "cb_inbox": '''s = get_session(c)
+        if not s.token: return bot.answer_callback_query(call.id, "❌ /new first")
+        r = api_get(f"/auth/{s.token}"); emails = r.get("email", []); stats["checked"] += 1
+        if not emails: bot.edit_message_text("📭 Empty", c, call.message.message_id)
         else:
-            txt = f"{len(emails)} messages:\\n\\n"
-            for e in emails[:10]:
-                s.seen.add(e.get("id"))
-                txt += f"`{e.get('id')}` — {e.get('from','?')}\\n{e.get('subject','—')}\\n\\n"
-            bot.edit_message_text(txt, cid, call.message.message_id)''',
-        "commands_ru": '''@bot.message_handler(commands=["new"])
-def cmd_new(message: types.Message) -> None:
-    cid = message.chat.id
-    s = get_session(cid)
+            txt = ""
+            for e in emails[:10]: s.seen.add(e.get("id")); txt += f"`{e.get('id')}` — {e.get('from','?')}\\n{e.get('subject','—')}\\n\\n"
+            bot.edit_message_text(f"{len(emails)} messages:\\n\\n" + txt, c, call.message.message_id)''',
+        "ru": '''@bot.message_handler(commands=["new"])
+def cmd_new(m: types.Message) -> None:
+    c = m.chat.id
+    s = get_session(c)
     r = api_get("/generate")
     if "address" in r:
-        s.addr = r["address"]
-        s.token = r.get("token")
-        s.seen = set()
+        s.addr, s.token, s.seen = r["address"], r.get("token"), set()
         stats["created"] += 1
-        bot.send_message(cid, f"✅ `{r['address']}`\\nТокен: `{str(r.get('token',''))[:20]}...`")
-    else:
-        bot.send_message(cid, "❌ Ошибка")
-
+        bot.send_message(c, f"✅ `{r['address']}`\\nТокен: `{str(r.get('token',''))[:20]}...`")
+    else: bot.send_message(c, "❌ Ошибка")
 
 @bot.message_handler(commands=["inbox"])
-def cmd_inbox(message: types.Message) -> None:
-    cid = message.chat.id
-    s = get_session(cid)
-    if not s.token:
-        return bot.send_message(cid, "❌ /new")
-    r = api_get(f"/auth/{s.token}")
-    emails = r.get("email", [])
-    stats["checked"] += 1
-    if not emails:
-        return bot.send_message(cid, "📭 Пусто")
+def cmd_inbox(m: types.Message) -> None:
+    c = m.chat.id
+    s = get_session(c)
+    if not s.token: return bot.send_message(c, "❌ /new")
+    r = api_get(f"/auth/{s.token}"); emails = r.get("email", []); stats["checked"] += 1
+    if not emails: return bot.send_message(c, "📭 Пусто")
     t = f"*{len(emails)} писем*\\n\\n"
     for e in emails[:15]:
-        n = "🆕 " if e.get("id") not in s.seen else ""
-        s.seen.add(e.get("id"))
+        n = "🆕 " if e.get("id") not in s.seen else ""; s.seen.add(e.get("id"))
         t += f"{n}`{e.get('id')}` — {e.get('from','?')}\\n{e.get('subject','—')}\\n\\n"
-    bot.send_message(cid, t)''',
-        "cb_new_ru": '''        r = api_get("/generate")
+    bot.send_message(c, t)''',
+        "cb_new_ru": '''r = api_get("/generate")
         if "address" in r:
-            s = get_session(cid)
-            s.addr = r["address"]
-            s.token = r.get("token")
-            s.seen = set()
+            s = get_session(c); s.addr, s.token, s.seen = r["address"], r.get("token"), set()
             stats["created"] += 1
-            bot.edit_message_text(f"✅ `{r['address']}`", cid, call.message.message_id)''',
-        "cb_inbox_ru": '''        s = get_session(cid)
-        if not s.token:
-            return bot.answer_callback_query(call.id, "❌ /new")
-        r = api_get(f"/auth/{s.token}")
-        emails = r.get("email", [])
-        stats["checked"] += 1
-        if not emails:
-            bot.edit_message_text("📭 Пусто", cid, call.message.message_id)
+            bot.edit_message_text(f"✅ `{r['address']}`", c, call.message.message_id)''',
+        "cb_inbox_ru": '''s = get_session(c)
+        if not s.token: return bot.answer_callback_query(call.id, "❌ /new")
+        r = api_get(f"/auth/{s.token}"); emails = r.get("email", []); stats["checked"] += 1
+        if not emails: bot.edit_message_text("📭 Пусто", c, call.message.message_id)
         else:
-            txt = f"{len(emails)} писем:\\n\\n"
-            for e in emails[:10]:
-                s.seen.add(e.get("id"))
-                txt += f"`{e.get('id')}` — {e.get('from','?')}\\n{e.get('subject','—')}\\n\\n"
-            bot.edit_message_text(txt, cid, call.message.message_id)''',
+            txt = ""
+            for e in emails[:10]: s.seen.add(e.get("id")); txt += f"`{e.get('id')}` — {e.get('from','?')}\\n{e.get('subject','—')}\\n\\n"
+            bot.edit_message_text(f"{len(emails)} писем:\\n\\n" + txt, c, call.message.message_id)''',
     },
 }
 
-# Default commands for services without custom logic
-DEFAULT_EN = {
-    "commands": '''@bot.message_handler(commands=["info"])
-def cmd_info(message: types.Message) -> None:
-    bot.send_message(message.chat.id, f"*{SERVICE_NAME}*\\n\\n🌐 {BASE_URL}\\n\\nVisit the website to use this service.")''',
-    "cb_new": '''        bot.send_message(cid, f"Visit {BASE_URL} to create an email.")''',
-    "cb_inbox": '''        bot.send_message(cid, f"Visit {BASE_URL} to check your inbox.")''',
-}
-DEFAULT_RU = {
-    "commands": '''@bot.message_handler(commands=["info"])
-def cmd_info(message: types.Message) -> None:
-    bot.send_message(message.chat.id, f"*{SERVICE_NAME}*\\n\\n🌐 {BASE_URL}\\n\\nПосетите сайт для использования.")''',
-    "cb_new": '''        bot.send_message(cid, f"Посетите {BASE_URL}")''',
-    "cb_inbox": '''        bot.send_message(cid, f"Посетите {BASE_URL}")''',
-}
+DEFAULT_EN = {"en": '@bot.message_handler(commands=["info"])\ndef cmd_info(m: types.Message) -> None:\n    bot.send_message(m.chat.id, f"*{SERVICE_NAME}*\\n\\n🌐 {BASE_URL}\\n\\nVisit the website.")', "cb_new": 'bot.send_message(cid, f"Visit {BASE_URL}")', "cb_inbox": 'bot.send_message(cid, f"Visit {BASE_URL}")', "ru": '@bot.message_handler(commands=["info"])\ndef cmd_info(m: types.Message) -> None:\n    bot.send_message(m.chat.id, f"*{SERVICE_NAME}*\\n\\n🌐 {BASE_URL}\\n\\nПосетите сайт.")', "cb_new_ru": 'bot.send_message(cid, f"Посетите {BASE_URL}")', "cb_inbox_ru": 'bot.send_message(cid, f"Посетите {BASE_URL}")'}
 
-
-# ═══════════════════════════════════════════════════════════════
-# GENERATE ALL FILES
-# ═══════════════════════════════════════════════════════════════
 count = 0
-
 for svc in SERVICES:
-    sid = svc["id"]
-    name = svc["name"]
-    base_url = svc["url"]
-    env_var = svc["env"]
+    sid, name, base_url, env_var = svc["id"], svc["name"], svc["url"], svc["env"]
+    cmds = CMDS.get(sid, DEFAULT_EN)
 
-    cmds = SERVICE_COMMANDS.get(sid, {
-        "commands_en": DEFAULT_EN["commands"].replace("{SERVICE_NAME}", name).replace("{BASE_URL}", base_url),
-        "cb_new_en": DEFAULT_EN["cb_new"].replace("{BASE_URL}", base_url),
-        "cb_inbox_en": DEFAULT_EN["cb_inbox"].replace("{BASE_URL}", base_url),
-        "commands_ru": DEFAULT_RU["commands"].replace("{SERVICE_NAME}", name).replace("{BASE_URL}", base_url),
-        "cb_new_ru": DEFAULT_RU["cb_new"].replace("{BASE_URL}", base_url),
-        "cb_inbox_ru": DEFAULT_RU["cb_inbox"].replace("{BASE_URL}", base_url),
-    })
+    for folder, template, lang in [
+        ("english/telebot", TELEBOT_EN, "en"),
+        ("russian/telebot", TELEBOT_RU, "ru"),
+        ("english/aiogram-2", AIOGRAM2_EN, "en"),
+        ("russian/aiogram-2", AIOGRAM2_RU, "ru"),
+        ("english/aiogram-3", AIOGRAM3_EN, "en"),
+        ("russian/aiogram-3", AIOGRAM3_RU, "ru"),
+    ]:
+        path = os.path.join(ROOT, folder, f"bot_{sid}.py")
+        commands = cmds.get(lang, cmds.get("en", DEFAULT_EN["en"]))
+        cb_new = cmds.get(f"cb_new_{lang}" if lang == "ru" else "cb_new", cmds.get("cb_new", DEFAULT_EN["cb_new"]))
+        cb_inbox = cmds.get(f"cb_inbox_{lang}" if lang == "ru" else "cb_inbox", cmds.get("cb_inbox", DEFAULT_EN["cb_inbox"]))
 
-    templates = [
-        ("english/telebot", TELEBOT_EN, "commands_en", "cb_new_en", "cb_inbox_en"),
-        ("russian/telebot", TELEBOT_RU, "commands_ru", "cb_new_ru", "cb_inbox_ru"),
-        ("english/aiogram-2", AIOGRAM2_EN, "commands_en", "cb_new_en", "cb_inbox_en"),
-        ("russian/aiogram-2", AIOGRAM2_RU, "commands_ru", "cb_new_ru", "cb_inbox_ru"),
-        ("english/aiogram-3", AIOGRAM3_EN, "commands_en", "cb_new_en", "cb_inbox_en"),
-        ("russian/aiogram-3", AIOGRAM3_RU, "commands_ru", "cb_new_ru", "cb_inbox_ru"),
-    ]
-
-    for folder, template, cmds_key, cb_new_key, cb_inbox_key in templates:
-        fname = f"bot_{sid}.py"
-        path = os.path.join(ROOT, folder, fname)
-
-        # Get the right commands
-        commands_text = cmds.get(cmds_key, DEFAULT_EN["commands"])
-        cb_new_text = cmds.get(cb_new_key, DEFAULT_EN["cb_new"])
-        cb_inbox_text = cmds.get(cb_inbox_key, DEFAULT_EN["cb_inbox"])
-
-        # Replace placeholders
-        content = template.replace("{name}", name)
-        content = content.replace("{base_url}", base_url)
-        content = content.replace("{env_var}", env_var)
-        content = content.replace("{commands}", commands_text)
-        content = content.replace("{cb_new}", cb_new_text)
-        content = content.replace("{cb_inbox}", cb_inbox_text)
+        content = template.replace("{name}", name).replace("{base_url}", base_url).replace("{env_var}", env_var)
+        content = content.replace("{commands}", commands).replace("{cb_new}", cb_new).replace("{cb_inbox}", cb_inbox)
 
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w") as f:
-            f.write(content)
+        with open(path, "w") as f: f.write(content)
         count += 1
         print(f"  [{count:02d}] {path.replace(ROOT+'/', '')}")
 
-print(f"\n{'='*60}")
-print(f"  Generated: {count} bot files")
-print(f"  Services: {len(SERVICES)}")
-print(f"  Frameworks: telebot, aiogram-2, aiogram-3")
-print(f"  Languages: russian, english")
-print(f"{'='*60}")
+print(f"\n  Generated: {count} files")

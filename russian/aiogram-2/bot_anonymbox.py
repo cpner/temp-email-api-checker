@@ -13,20 +13,15 @@ AnonymBox — Telegram-бот временной почты (aiogram 2.x)
 - Статистика использования
 - Корректное завершение
 
-Автор: Temp Email Bots Project
+Автор: Владислав Софронов (cpner)
+Контакт: feedback@gondon.su | t.me/reejb | gondon.su
 Лицензия: MIT
 """
-import asyncio
-import logging
+import asyncio, logging
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils import executor
-import requests
-import random
-import string
-import time
-import os
-import sys
+import requests, random, string, time, os, sys
 from typing import Optional, Dict, Any, Set
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -55,10 +50,9 @@ class UserSession:
 sessions: Dict[int, UserSession] = {{}}
 stats: Dict[str, int] = {{"created": 0, "checked": 0, "errors": 0}}
 
-def get_session(user_id: int) -> UserSession:
-    if user_id not in sessions:
-        sessions[user_id] = UserSession()
-    return sessions[user_id]
+def get_session(uid: int) -> UserSession:
+    if uid not in sessions: sessions[uid] = UserSession()
+    return sessions[uid]
 
 def api_get(path: str = "", params: Optional[Dict] = None, headers: Optional[Dict] = None) -> Dict:
     url = f"{{BASE_URL}}{{path}}"
@@ -83,7 +77,7 @@ def gen_name(length: int = 10) -> str:
 
 
 @dp.message_handler(commands=["start", "menu"])
-async def cmd_start(message: types.Message) -> None:
+async def cmd_start(m: types.Message) -> None:
     kb = InlineKeyboardMarkup(row_width=2)
     kb.add(
         InlineKeyboardButton("📧 Новая почта", callback_data="new"),
@@ -92,37 +86,31 @@ async def cmd_start(message: types.Message) -> None:
         InlineKeyboardButton("📊 Статистика", callback_data="stats"),
         InlineKeyboardButton("❓ Помощь", callback_data="help"),
     )
-    await message.answer(
-        f"*{{SERVICE_NAME}}*\nБот временной почты\n\n/new — Создать\n/inbox — Проверить\n/info — Данные",
-        reply_markup=kb
-    )
+    await m.answer("*{{SERVICE_NAME}}*\nБот временной почты\n\n/new — Создать\n/inbox — Проверить\n/info — Данные", reply_markup=kb)
 
 
 @bot.message_handler(commands=["info"])
-def cmd_info(message: types.Message) -> None:
-    bot.send_message(message.chat.id, f"*AnonymBox*\n\n🌐 https://api.anonymbox.com/v1\n\nПосетите сайт для использования.")
+def cmd_info(m: types.Message) -> None:
+    bot.send_message(m.chat.id, f"*{SERVICE_NAME}*\n\n🌐 {BASE_URL}\n\nПосетите сайт.")
 
 
 @dp.callback_query_handler(lambda c: True)
-async def callback_handler(call: types.CallbackQuery) -> None:
-    cid = call.message.chat.id
-    action = call.data
+async def cb(call: types.CallbackQuery) -> None:
+    c = call.message.chat.id
+    a = call.data
     try:
-        if action == "new":
-        bot.send_message(cid, f"Посетите https://api.anonymbox.com/v1")
-        elif action == "inbox":
-        bot.send_message(cid, f"Посетите https://api.anonymbox.com/v1")
-        elif action == "info":
-            s = get_session(cid)
+        if a == "new": bot.send_message(cid, f"Посетите {BASE_URL}")
+        elif a == "inbox": bot.send_message(cid, f"Посетите {BASE_URL}")
+        elif a == "info":
+            s = get_session(c)
             await call.answer(f"Почта: {{s.addr or 'Не установлена'}}", show_alert=True)
-        elif action == "stats":
+        elif a == "stats":
             await call.answer(f"Создано: {{stats['created']}} | Проверок: {{stats['checked']}}", show_alert=True)
-        elif action == "help":
-            await bot.send_message(cid, "/new — Создать\n/inbox — Проверить\n/info — Данные")
+        elif a == "help":
+            await bot.send_message(c, "/new — Создать\n/inbox — Проверить\n/info — Данные")
     except Exception as e:
         logger.error(f"Ошибка: {{e}}")
         await call.answer("Ошибка")
-
 
 if __name__ == "__main__":
     logger.info(f"Запуск {{SERVICE_NAME}}...")

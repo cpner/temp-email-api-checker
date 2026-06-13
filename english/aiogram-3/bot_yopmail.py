@@ -13,20 +13,14 @@ Features:
 - Usage statistics
 - Graceful shutdown
 
-Author: Владислав Софронов (cpner)
+Author: Vladislav Sofronov (cpner)
 Contact: feedback@gondon.su | t.me/reejb | gondon.su
 License: MIT
 """
-import asyncio
-import logging
+import asyncio, logging
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-import requests
-import random
-import string
-import time
-import os
-import sys
+import requests, random, string, time, os, sys
 from typing import Optional, Dict, Any, Set
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -55,10 +49,9 @@ class UserSession:
 sessions: Dict[int, UserSession] = {{}}
 stats: Dict[str, int] = {{"created": 0, "checked": 0, "errors": 0}}
 
-def get_session(user_id: int) -> UserSession:
-    if user_id not in sessions:
-        sessions[user_id] = UserSession()
-    return sessions[user_id]
+def get_session(uid: int) -> UserSession:
+    if uid not in sessions: sessions[uid] = UserSession()
+    return sessions[uid]
 
 def api_get(path: str = "", params: Optional[Dict] = None, headers: Optional[Dict] = None) -> Dict:
     url = f"{{BASE_URL}}{{path}}"
@@ -83,7 +76,7 @@ def gen_name(length: int = 10) -> str:
 
 
 @dp.message(F.text.in_{{"/start", "/menu"}})
-async def cmd_start(message: types.Message) -> None:
+async def cmd_start(m: types.Message) -> None:
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📧 New Email", callback_data="new"),
          InlineKeyboardButton(text="📥 Inbox", callback_data="inbox")],
@@ -91,24 +84,21 @@ async def cmd_start(message: types.Message) -> None:
          InlineKeyboardButton(text="📊 Stats", callback_data="stats")],
         [InlineKeyboardButton(text="❓ Help", callback_data="help")],
     ])
-    await message.answer(
-        f"*{{SERVICE_NAME}}*\nTemporary Email Bot\n\n/new — Create\n/inbox — Check\n/info — Info",
-        reply_markup=kb
-    )
+    await m.answer("*{{SERVICE_NAME}}*\nTemporary Email Bot\n\n/new — Create\n/inbox — Check\n/info — Info", reply_markup=kb)
 
 
 @bot.message_handler(commands=["info"])
-def cmd_info(message: types.Message) -> None:
-    bot.send_message(message.chat.id, f"*YOPmail*\n\n🌐 https://yopmail.com\n\nVisit the website to use this service.")
+def cmd_info(m: types.Message) -> None:
+    bot.send_message(m.chat.id, f"*{SERVICE_NAME}*\n\n🌐 {BASE_URL}\n\nVisit the website.")
 
 
 @dp.callback_query(F.data == "new")
 async def cb_new_handler(call: types.CallbackQuery) -> None:
-        bot.send_message(cid, f"Visit https://yopmail.com to create an email.")
+bot.send_message(cid, f"Visit {BASE_URL}")
 
 @dp.callback_query(F.data == "inbox")
 async def cb_inbox_handler(call: types.CallbackQuery) -> None:
-        bot.send_message(cid, f"Visit https://yopmail.com to check your inbox.")
+bot.send_message(cid, f"Visit {BASE_URL}")
 
 @dp.callback_query(F.data == "info")
 async def cb_info_handler(call: types.CallbackQuery) -> None:
@@ -125,9 +115,8 @@ async def cb_help_handler(call: types.CallbackQuery) -> None:
 
 
 async def main() -> None:
-    logger.info(f"Starting {{SERVICE_NAME}} Bot...")
+    logger.info(f"Starting {{SERVICE_NAME}}...")
     await dp.start_polling(bot)
-
 
 if __name__ == "__main__":
     asyncio.run(main())
