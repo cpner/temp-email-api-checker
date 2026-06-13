@@ -3,15 +3,15 @@ name: Bug Report
 about: Report a bug in a bot or API checker
 title: '[BUG] '
 labels: bug
-assignees: ''
+assignees: cpner
 ---
 
 ## Bot Information
 
-- **Service**: [e.g., Guerrilla Mail, TempMail.plus]
-- **Framework**: [e.g., telebot, aiogram-2, aiogram-3]
-- **Language**: [e.g., Russian, English]
-- **Python version**: [e.g., 3.11.0]
+- **Service:** [e.g., Guerrilla Mail, TempMail.plus]
+- **Framework:** [e.g., telebot, aiogram-2, aiogram-3]
+- **Language:** [e.g., Russian, English]
+- **Python version:** [e.g., 3.11.0]
 
 ## Description
 
@@ -46,3 +46,9 @@ Paste error message here
 ## Additional Context
 
 Any other context about the problem.
+
+## Contact
+
+If urgent, contact directly:
+- **Telegram:** [t.me/reejb](https://t.me/reejb)
+- **Email:** feedback@gondon.su

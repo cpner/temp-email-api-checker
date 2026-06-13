@@ -14,7 +14,8 @@ Features:
 - Usage statistics
 - Graceful shutdown
 
-Author: Temp Email Bots Project
+Author: Владислав Софронов (cpner)
+Contact: feedback@gondon.su | t.me/reejb | gondon.su
 License: MIT
 """
 import telebot

@@ -3,7 +3,7 @@ name: Feature Request
 about: Suggest a new feature or API service
 title: '[FEATURE] '
 labels: enhancement
-assignees: ''
+assignees: cpner
 ---
 
 ## Description
@@ -20,10 +20,10 @@ How do you think this should be implemented?
 
 ## API Service (if applicable)
 
-- **Service name**: [e.g., NewTempMail]
-- **API URL**: [e.g., https://api.newtempmail.com]
-- **Documentation**: [Link to API docs]
-- **Auth required**: [Yes/No]
+- **Service name:** [e.g., NewTempMail]
+- **API URL:** [e.g., https://api.newtempmail.com]
+- **Documentation:** [Link to API docs]
+- **Auth required:** [Yes/No]
 
 ## Alternatives Considered
 
@@ -32,3 +32,9 @@ Any alternative solutions or features you've considered.
 ## Additional Context
 
 Any other context or screenshots.
+
+## Contact
+
+If urgent, contact directly:
+- **Telegram:** [t.me/reejb](https://t.me/reejb)
+- **Email:** feedback@gondon.su

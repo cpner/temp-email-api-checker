@@ -9,6 +9,18 @@
 
 **84 production-ready Telegram bots** for temporary/disposable email services, built across 3 Python frameworks and 2 languages. Includes a comprehensive API checker that tested **270+ endpoints** across 40+ services.
 
+## Author
+
+| | |
+|---|---|
+| **Name** | Владислав Алексеевич Софронов |
+| **GitHub** | [cpner](https://github.com/cpner) |
+| **Telegram** | [t.me/reejb](https://t.me/reejb) |
+| **Telegram Bot** | [t.me/marco_feedback_bot](https://t.me/marco_feedback_bot) |
+| **Email** | [feedback@gondon.su](mailto:feedback@gondon.su) |
+| **Website** | [gondon.su](https://gondon.su) |
+| **City** | Череповец, Россия |
+
 ## Quick Start
 
 ```bash
@@ -32,7 +44,7 @@ python3 bot_guerrilla.py
 ```
 ├── temp_email_api_checker.py      # API checker (270+ endpoints)
 ├── requirements.txt               # All dependencies
-├── LICENSE                        # MIT License
+├── LICENSE                        # MIT License — Владислав Софронов
 ├── CONTRIBUTING.md                # Contribution guidelines
 ├── SECURITY.md                    # Security policy
 ├── CODE_OF_CONDUCT.md             # Code of conduct
@@ -136,7 +148,7 @@ Full REST API — no registration required.
 
 ### TempMail.plus (42 endpoints)
 Monitor inbox for any email provider.
-- **Supported**: Gmail, Yahoo, Outlook, Hotmail, ProtonMail, AOL, Zoho, GMX, Mail.com, Yandex, iCloud, 1secmail, Mailinator
+- **Supported:** Gmail, Yahoo, Outlook, Hotmail, ProtonMail, AOL, Zoho, GMX, Mail.com, Yandex, iCloud, 1secmail, Mailinator
 - Random/temp domain monitoring
 - Custom limit parameter
 
@@ -158,10 +170,10 @@ Auto-expiring emails.
 - Timer display
 
 ### Others
-- **EmailFake/AnonymBox**: Simple inbox monitoring
-- **MailSac/MailSlurp**: Professional APIs with key support
-- **YOPmail**: Multi-domain with direct links
-- **Burner.kiwi/Mailnesia/EmailNator/EmailOnDeck**: Service info
+- **EmailFake/AnonymBox:** Simple inbox monitoring
+- **MailSac/MailSlurp:** Professional APIs with key support
+- **YOPmail:** Multi-domain with direct links
+- **Burner.kiwi/Mailnesia/EmailNator/EmailOnDeck:** Service info
 
 ## Running Bots
 
@@ -216,6 +228,17 @@ See [SECURITY.md](SECURITY.md) for reporting vulnerabilities.
 ## License
 
 This project is licensed under the MIT License — see [LICENSE](LICENSE) for details.
+
+**Author:** Владислав Софронов (cpner)
+
+## Contact
+
+| | |
+|---|---|
+| **Telegram** | [t.me/reejb](https://t.me/reejb) |
+| **Bot** | [t.me/marco_feedback_bot](https://t.me/marco_feedback_bot) |
+| **Email** | [feedback@gondon.su](mailto:feedback@gondon.su) |
+| **Website** | [gondon.su](https://gondon.su) |
 
 ## Stargazers
 

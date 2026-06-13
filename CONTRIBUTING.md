@@ -68,6 +68,13 @@ Before submitting a PR:
 
 Be respectful and inclusive. See [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
 
+## Contact
+
+- **Author:** Владислав Софронов (cpner)
+- **Telegram:** [t.me/reejb](https://t.me/reejb)
+- **Email:** feedback@gondon.su
+- **Website:** [gondon.su](https://gondon.su)
+
 ## Questions?
 
-Open an issue with the "question" label.
+Open an issue with the "question" label or contact via Telegram.
