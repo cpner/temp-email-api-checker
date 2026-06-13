@@ -1,218 +1,206 @@
 #!/usr/bin/env python3
 """
-Telegram-бот: Временная почта через 10 Minute Mail API
-Быстрая почта с автоматическим удалением через 10 минут
+10MinuteMail Telegram Bot
+Почта на 10 минут
+API: https://10minutemail.net/address.api.php
 """
-
 import telebot
 from telebot import types
 import requests
-import re
-import time
+import random
+import string
+import os
 
-BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
+BOT_TOKEN = os.environ.get("BOT_TOKEN_10MIN", "YOUR_TOKEN")
 bot = telebot.TeleBot(BOT_TOKEN)
+BASE = "https://10minutemail.net/address.api.php"
 
-BASE_URL = "https://10minutemail.net"
-
-user_sessions = {}
-
-
-def get_session(chat_id):
-    if chat_id not in user_sessions:
-        user_sessions[chat_id] = {
-            "address": None,
-            "session_id": None,
-            "seen_ids": set(),
-            "created_at": None
-        }
-    return user_sessions[chat_id]
+sessions = {}
 
 
-def api_generate():
+def gs(cid):
+    if cid not in sessions:
+        sessions[cid] = {"seen": set(), "addr": None, "token": None, "key": None}
+    return sessions[cid]
+
+
+def api_get(path, **kw):
     try:
-        r = requests.get(f"{BASE_URL}/address.api.php?new=1", timeout=10)
-        return r.json()
-    except Exception as e:
-        return {"error": str(e)}
+        return requests.get(f"{BASE}/{path}", timeout=10, **kw).json()
+    except Exception:
+        return {"error": "timeout"}
 
 
-def api_get_messages(session_id):
+def api_post(path, data=None, **kw):
     try:
-        r = requests.get(
-            f"{BASE_URL}/address.api.php?sid={session_id}",
-            timeout=10
-        )
-        return r.json()
-    except Exception as e:
-        return {"error": str(e)}
+        return requests.post(f"{BASE}/{path}", json=data, timeout=10, **kw).json()
+    except Exception:
+        return {"error": "timeout"}
 
 
 @bot.message_handler(commands=["start"])
-def cmd_start(msg):
-    markup = types.InlineKeyboardMarkup(row_width=2)
-    markup.add(
-        types.InlineKeyboardButton("📧 Новая почта", callback_data="tm10_new"),
-        types.InlineKeyboardButton("📥 Проверить", callback_data="tm10_inbox"),
-        types.InlineKeyboardButton("⏱ Осталось", callback_data="tm10_time"),
-        types.InlineKeyboardButton("📋 Данные", callback_data="tm10_info"),
-        types.InlineKeyboardButton("❓ Помощь", callback_data="tm10_help")
-    )
+def cmd_start(m):
+    kb = types.InlineKeyboardMarkup(row_width=2)
+    kb.add(types.InlineKeyboardButton("📧 Новая", callback_data="tm10_new"))
+    kb.add(types.InlineKeyboardButton("📥 Письма", callback_data="tm10_inbox"))
+    kb.add(types.InlineKeyboardButton("🔑 Ключ", callback_data="tm10_key"))
+    kb.add(types.InlineKeyboardButton("📋 Данные", callback_data="tm10_info"))
+    kb.add(types.InlineKeyboardButton("❓ Помощь", callback_data="tm10_help"))
     text = (
-        "⏰ *10 Minute Mail Bot*\n\n"
-        "Временная почта на 10 минут\n\n"
+        "📧 *10MinuteMail Bot*\n"
+        "Почта на 10 минут\n\n"
         "/new — Создать почту\n"
-        "/inbox — Проверить входящие\n"
-        "/info — Данные и время\n"
-        "/help — Справка\n\n"
-        "⚠️ Почта автоматически удаляется через 10 минут!"
+        "/set <email> — Установить\n"
+        "/inbox — Проверить\n"
+        "/key <API_KEY> — Установить ключ\n"
+        "/info — Данные"
     )
-    bot.send_message(msg.chat.id, text, parse_mode="Markdown", reply_markup=markup)
+    bot.send_message(m.chat.id, text, parse_mode="Markdown", reply_markup=kb)
 
 
 @bot.message_handler(commands=["new"])
-def cmd_new(msg):
-    chat_id = msg.chat.id
-    data = api_generate()
-    if "address" in data:
-        sess = get_session(chat_id)
-        sess["address"] = data["address"]
-        sess["session_id"] = data.get("session_id", "")
-        sess["seen_ids"] = set()
-        sess["created_at"] = time.time()
-        timer = data.get("timer", 600)
-        minutes = int(timer) // 60
-        text = (
-            f"✅ *Почта создана!*\n\n"
-            f"📧 Адрес: `{data['address']}`\n"
-            f"⏱ Время жизни: *{minutes} мин*\n\n"
-            f"Используйте адрес, пока он активен!"
-        )
-        bot.send_message(chat_id, text, parse_mode="Markdown")
-    else:
-        bot.send_message(chat_id, "❌ Ошибка создания почты")
+def cmd_new(m):
+    s = gs(m.chat.id)
+    rnd = "".join(random.choices(string.ascii_lowercase + string.digits, k=10))
+    addr = f"{rnd}@10minutemail.net"
+    s.update(addr=addr, seen=set())
+    bot.send_message(m.chat.id, f"✅ `{addr}`", parse_mode="Markdown")
+
+
+@bot.message_handler(commands=["set"])
+def cmd_set(m):
+    parts = m.text.split(maxsplit=1)
+    if len(parts) < 2:
+        return bot.send_message(m.chat.id, "/set email@domain.com")
+    s = gs(m.chat.id)
+    s["addr"] = parts[1].strip()
+    s["seen"] = set()
+    bot.send_message(m.chat.id, f"✅ `{s['addr']}`", parse_mode="Markdown")
 
 
 @bot.message_handler(commands=["inbox"])
-def cmd_inbox(msg):
-    chat_id = msg.chat.id
-    sess = get_session(chat_id)
-    if not sess.get("session_id"):
-        bot.send_message(chat_id, "❌ Сначала создайте почту: /new")
-        return
-    elapsed = time.time() - sess.get("created_at", time.time())
-    if elapsed > 600:
-        bot.send_message(chat_id, "⏰ *Время почты истекло!*\nСоздайте новую: /new", parse_mode="Markdown")
-        return
-    remaining = 600 - int(elapsed)
-    data = api_get_messages(sess["session_id"])
-    if "messages" in data:
-        messages = data["messages"]
-        if not messages:
-            bot.send_message(chat_id, f"📭 Ящик пуст (⏱ {remaining} сек)")
-            return
-        text = f"📬 *{len(messages)} писем* (⏱ {remaining} сек)\n\n"
-        for m in messages[:15]:
-            mid = m.get("mail_id", "?")
-            sender = m.get("mail_from", "?")
-            subject = m.get("mail_subject", "—")
-            text += f"🆔 `{mid}` | {sender}\n📝 {subject}\n\n"
-        bot.send_message(chat_id, text, parse_mode="Markdown")
-    else:
-        bot.send_message(chat_id, "❌ Ошибка получения писем")
+def cmd_inbox(m):
+    s = gs(m.chat.id)
+    if not s.get("addr"):
+        return bot.send_message(m.chat.id, "❌ /new или /set email")
+    try:
+        r = requests.get(f"{BASE}/inbox/{s['addr']}", timeout=10)
+        if r.ok:
+            ct = r.headers.get("content-type", "")
+            data = r.json() if "json" in ct else []
+            if isinstance(data, list) and data:
+                txt = f"📬 *{len(data)} писем*\n\n"
+                for x in data[:15]:
+                    nid = x.get("id", "?")
+                    new = "🆕 " if nid not in s["seen"] else ""
+                    s["seen"].add(nid)
+                    txt += f"{new}`{nid}` | {x.get("from", "?")}\n📝 {x.get("subject", "—")}\n\n"
+                bot.send_message(m.chat.id, txt, parse_mode="Markdown")
+            else:
+                bot.send_message(m.chat.id, "📭 Пусто")
+        else:
+            bot.send_message(m.chat.id, "📭 Пусто или ошибка")
+    except Exception:
+        bot.send_message(m.chat.id, "❌ Сервис недоступен")
+
+
+@bot.message_handler(commands=["read"])
+def cmd_read(m):
+    parts = m.text.split(maxsplit=1)
+    if len(parts) < 2:
+        return bot.send_message(m.chat.id, "/read <ID>")
+    s = gs(m.chat.id)
+    if not s.get("addr"):
+        return bot.send_message(m.chat.id, "❌ /new")
+    try:
+        r = requests.get(f"{BASE}/inbox/{s['addr']}/{parts[1]}", timeout=10)
+        if r.ok:
+            d = r.json() if "json" in r.headers.get("content-type", "") else {}
+            body = d.get("text", d.get("html", "Нет содержимого"))[:3500]
+            bot.send_message(m.chat.id, f"📧 *Письмо*\n\n{body}", parse_mode="Markdown")
+        else:
+            bot.send_message(m.chat.id, "❌ Не найдено")
+    except Exception:
+        bot.send_message(m.chat.id, "❌ Ошибка")
+
+
+@bot.message_handler(commands=["key"])
+def cmd_key(m):
+    parts = m.text.split(maxsplit=1)
+    if len(parts) < 2:
+        return bot.send_message(m.chat.id, "/key YOUR_API_KEY")
+    s = gs(m.chat.id)
+    s["key"] = parts[1].strip()
+    bot.send_message(m.chat.id, f"✅ Ключ установлен: `{s['key'][:10]}...`", parse_mode="Markdown")
 
 
 @bot.message_handler(commands=["info"])
-def cmd_info(msg):
-    sess = get_session(msg.chat.id)
-    if not sess.get("address"):
-        bot.send_message(msg.chat.id, "❌ Почта не создана")
-        return
-    elapsed = time.time() - sess.get("created_at", time.time())
-    remaining = max(0, 600 - int(elapsed))
-    minutes = remaining // 60
-    seconds = remaining % 60
-    text = (
+def cmd_info(m):
+    s = gs(m.chat.id)
+    txt = (
         f"📋 *Данные*\n\n"
-        f"📧 Адрес: `{sess['address']}`\n"
-        f"⏱ Осталось: *{minutes}м {seconds}с*\n"
-        f"📩 Прочитано: {len(sess.get('seen_ids', []))}"
+        f"📧 Адрес: `{s.get('addr', '—')}`\n"
+        f"🔑 Ключ: `{str(s.get('key', '—'))[:10]}...`\n"
+        f"📩 Прочитано: {len(s.get('seen', []))}"
     )
-    bot.send_message(msg.chat.id, text, parse_mode="Markdown")
+    bot.send_message(m.chat.id, txt, parse_mode="Markdown")
 
 
 @bot.message_handler(commands=["help"])
-def cmd_help(msg):
+def cmd_help(m):
     text = (
-        "⏰ *10 Minute Mail Bot*\n\n"
-        "/new — Создать почту (10 мин)\n"
-        "/inbox — Проверить письма\n"
-        "/info — Данные и время\n"
-        "/help — Справка\n\n"
-        "API: 10minutemail.net (бесплатно)"
+        "📧 *10MinuteMail Bot*\n\n"
+        "/new — Создать\n"
+        "/set <email> — Установить\n"
+        "/inbox — Проверить\n"
+        "/read <ID> — Прочитать\n"
+        "/key <KEY> — API ключ\n"
+        "/info — Данные"
     )
-    bot.send_message(msg.chat.id, text, parse_mode="Markdown")
+    bot.send_message(m.chat.id, text, parse_mode="Markdown")
 
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith("tm10_"))
-def callback(call):
-    chat_id = call.message.chat.id
-    action = call.data.replace("tm10_", "")
+@bot.callback_query_handler(func=lambda c: c.data.startswith("tm10_"))
+def cb(call):
+    cid = call.message.chat.id
+    act = call.data.replace("tm10_", "")
 
-    if action == "new":
-        data = api_generate()
-        if "address" in data:
-            sess = get_session(chat_id)
-            sess["address"] = data["address"]
-            sess["session_id"] = data.get("session_id", "")
-            sess["seen_ids"] = set()
-            sess["created_at"] = time.time()
-            bot.edit_message_text(
-                f"✅ `{data['address']}`\n⏱ {data.get('timer', 600) // 60} мин",
-                chat_id, call.message.message_id, parse_mode="Markdown"
-            )
+    if act == "new":
+        s = gs(cid)
+        rnd = "".join(random.choices(string.ascii_lowercase + string.digits, k=10))
+        addr = f"{rnd}@10minutemail.net"
+        s.update(addr=addr, seen=set())
+        bot.edit_message_text(f"✅ `{addr}`", cid, call.message.message_id, parse_mode="Markdown")
 
-    elif action == "inbox":
-        sess = get_session(chat_id)
-        if not sess.get("session_id"):
-            bot.answer_callback_query(call.id, "❌ /new")
-            return
-        elapsed = time.time() - sess.get("created_at", time.time())
-        if elapsed > 600:
-            bot.answer_callback_query(call.id, "⏰ Время истекло!")
-            return
-        data = api_get_messages(sess["session_id"])
-        if "messages" in data:
-            msgs = data["messages"]
-            if not msgs:
-                bot.edit_message_text("📭 Пусто", chat_id, call.message.message_id)
+    elif act == "inbox":
+        s = gs(cid)
+        if not s.get("addr"):
+            return bot.answer_callback_query(call.id, "❌ /new")
+        try:
+            r = requests.get(f"{BASE}/inbox/{s['addr']}", timeout=10)
+            ct = r.headers.get("content-type", "")
+            data = r.json() if r.ok and "json" in ct else []
+            if isinstance(data, list) and data:
+                txt = f"📬 {len(data)} писем:\n\n"
+                for x in data[:10]:
+                    txt += f"`{x.get('id','?')}` | {x.get('from','?')}\n📝 {x.get('subject','—')}\n\n"
+                bot.edit_message_text(txt, cid, call.message.message_id)
             else:
-                text = f"📬 {len(msgs)} писем:\n\n"
-                for m in msgs[:10]:
-                    text += f"🆔 {m.get('mail_id')} | {m.get('mail_from', '?')}\n📝 {m.get('mail_subject', '—')}\n\n"
-                bot.edit_message_text(text, chat_id, call.message.message_id)
+                bot.edit_message_text("📭 Пусто", cid, call.message.message_id)
+        except Exception:
+            bot.edit_message_text("❌ Ошибка", cid, call.message.message_id)
 
-    elif action == "time":
-        sess = get_session(chat_id)
-        if sess.get("created_at"):
-            elapsed = time.time() - sess["created_at"]
-            remaining = max(0, 600 - int(elapsed))
-            m, s = divmod(remaining, 60)
-            bot.answer_callback_query(call.id, f"Осталось: {m}м {s}с", show_alert=True)
-        else:
-            bot.answer_callback_query(call.id, "Нет активной почты")
+    elif act == "key":
+        bot.send_message(cid, "/key YOUR_API_KEY")
 
-    elif action == "info":
-        sess = get_session(chat_id)
-        if sess.get("address"):
-            bot.answer_callback_query(call.id, sess["address"], show_alert=True)
-        else:
-            bot.answer_callback_query(call.id, "Нет почты")
+    elif act == "info":
+        s = gs(cid)
+        bot.answer_callback_query(call.id, s.get("addr", "—"), show_alert=True)
 
-    elif action == "help":
-        bot.send_message(chat_id, "/new — Создать\n/inbox — Проверить\n/info — Данные")
+    elif act == "help":
+        bot.send_message(cid, "/new\n/inbox\n/info")
 
 
 if __name__ == "__main__":
-    print("[10MinuteMail Bot] Запуск...")
+    print("[10MinuteMail Bot] Running...")
     bot.infinity_polling()

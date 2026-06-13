@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-EmailFake Telegram Bot
-Проверка ящиков
-API: https://emailfake.com/api/v1
+TrashMail Telegram Bot
+С пересылкой
+API: https://api.trashmail.net
 """
 import telebot
 from telebot import types
@@ -11,9 +11,9 @@ import random
 import string
 import os
 
-BOT_TOKEN = os.environ.get("BOT_TOKEN_EMAILFAKE", "YOUR_TOKEN")
+BOT_TOKEN = os.environ.get("BOT_TOKEN_TRASHMAIL", "YOUR_TOKEN")
 bot = telebot.TeleBot(BOT_TOKEN)
-BASE = "https://emailfake.com/api/v1"
+BASE = "https://api.trashmail.net"
 
 sessions = {}
 
@@ -41,14 +41,14 @@ def api_post(path, data=None, **kw):
 @bot.message_handler(commands=["start"])
 def cmd_start(m):
     kb = types.InlineKeyboardMarkup(row_width=2)
-    kb.add(types.InlineKeyboardButton("📧 Новая", callback_data="ef_new"))
-    kb.add(types.InlineKeyboardButton("📥 Письма", callback_data="ef_inbox"))
-    kb.add(types.InlineKeyboardButton("🔑 Ключ", callback_data="ef_key"))
-    kb.add(types.InlineKeyboardButton("📋 Данные", callback_data="ef_info"))
-    kb.add(types.InlineKeyboardButton("❓ Помощь", callback_data="ef_help"))
+    kb.add(types.InlineKeyboardButton("📧 Новая", callback_data="trm_new"))
+    kb.add(types.InlineKeyboardButton("📥 Письма", callback_data="trm_inbox"))
+    kb.add(types.InlineKeyboardButton("🔑 Ключ", callback_data="trm_key"))
+    kb.add(types.InlineKeyboardButton("📋 Данные", callback_data="trm_info"))
+    kb.add(types.InlineKeyboardButton("❓ Помощь", callback_data="trm_help"))
     text = (
-        "📧 *EmailFake Bot*\n"
-        "Проверка ящиков\n\n"
+        "📧 *TrashMail Bot*\n"
+        "С пересылкой\n\n"
         "/new — Создать почту\n"
         "/set <email> — Установить\n"
         "/inbox — Проверить\n"
@@ -62,7 +62,7 @@ def cmd_start(m):
 def cmd_new(m):
     s = gs(m.chat.id)
     rnd = "".join(random.choices(string.ascii_lowercase + string.digits, k=10))
-    addr = f"{rnd}@emailfake.com"
+    addr = f"{rnd}@trashmail.net"
     s.update(addr=addr, seen=set())
     bot.send_message(m.chat.id, f"✅ `{addr}`", parse_mode="Markdown")
 
@@ -149,7 +149,7 @@ def cmd_info(m):
 @bot.message_handler(commands=["help"])
 def cmd_help(m):
     text = (
-        "📧 *EmailFake Bot*\n\n"
+        "📧 *TrashMail Bot*\n\n"
         "/new — Создать\n"
         "/set <email> — Установить\n"
         "/inbox — Проверить\n"
@@ -160,15 +160,15 @@ def cmd_help(m):
     bot.send_message(m.chat.id, text, parse_mode="Markdown")
 
 
-@bot.callback_query_handler(func=lambda c: c.data.startswith("ef_"))
+@bot.callback_query_handler(func=lambda c: c.data.startswith("trm_"))
 def cb(call):
     cid = call.message.chat.id
-    act = call.data.replace("ef_", "")
+    act = call.data.replace("trm_", "")
 
     if act == "new":
         s = gs(cid)
         rnd = "".join(random.choices(string.ascii_lowercase + string.digits, k=10))
-        addr = f"{rnd}@emailfake.com"
+        addr = f"{rnd}@trashmail.net"
         s.update(addr=addr, seen=set())
         bot.edit_message_text(f"✅ `{addr}`", cid, call.message.message_id, parse_mode="Markdown")
 
@@ -202,5 +202,5 @@ def cb(call):
 
 
 if __name__ == "__main__":
-    print("[EmailFake Bot] Running...")
+    print("[TrashMail Bot] Running...")
     bot.infinity_polling()

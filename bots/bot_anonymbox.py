@@ -1,156 +1,206 @@
 #!/usr/bin/env python3
 """
-Telegram-бот: Временная почта через AnonymBox API
-Анонимная почта без регистрации
+AnonymBox Telegram Bot
+Анонимная почта
+API: https://api.anonymbox.com/v1
 """
-
 import telebot
 from telebot import types
 import requests
-import time
+import random
+import string
+import os
 
-BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
+BOT_TOKEN = os.environ.get("BOT_TOKEN_ANONBOX", "YOUR_TOKEN")
 bot = telebot.TeleBot(BOT_TOKEN)
+BASE = "https://api.anonymbox.com/v1"
 
-BASE_URL = "https://api.anonymbox.com/v1"
-
-user_sessions = {}
-
-
-def get_session(chat_id):
-    if chat_id not in user_sessions:
-        user_sessions[chat_id] = {
-            "email": None,
-            "seen_ids": set()
-        }
-    return user_sessions[chat_id]
+sessions = {}
 
 
-def api_get_inbox(email):
+def gs(cid):
+    if cid not in sessions:
+        sessions[cid] = {"seen": set(), "addr": None, "token": None, "key": None}
+    return sessions[cid]
+
+
+def api_get(path, **kw):
     try:
-        r = requests.get(f"{BASE_URL}/inbox/{email}", timeout=10)
-        if r.status_code == 200:
-            return r.json()
-        return {"error": f"HTTP {r.status_code}"}
-    except Exception as e:
-        return {"error": str(e)}
+        return requests.get(f"{BASE}/{path}", timeout=10, **kw).json()
+    except Exception:
+        return {"error": "timeout"}
+
+
+def api_post(path, data=None, **kw):
+    try:
+        return requests.post(f"{BASE}/{path}", json=data, timeout=10, **kw).json()
+    except Exception:
+        return {"error": "timeout"}
 
 
 @bot.message_handler(commands=["start"])
-def cmd_start(msg):
-    markup = types.InlineKeyboardMarkup(row_width=2)
-    markup.add(
-        types.InlineKeyboardButton("📧 Установить почту", callback_data="ab_set"),
-        types.InlineKeyboardButton("📥 Проверить", callback_data="ab_inbox"),
-        types.InlineKeyboardButton("📋 Данные", callback_data="ab_info"),
-        types.InlineKeyboardButton("❓ Помощь", callback_data="ab_help")
-    )
+def cmd_start(m):
+    kb = types.InlineKeyboardMarkup(row_width=2)
+    kb.add(types.InlineKeyboardButton("📧 Новая", callback_data="ab_new"))
+    kb.add(types.InlineKeyboardButton("📥 Письма", callback_data="ab_inbox"))
+    kb.add(types.InlineKeyboardButton("🔑 Ключ", callback_data="ab_key"))
+    kb.add(types.InlineKeyboardButton("📋 Данные", callback_data="ab_info"))
+    kb.add(types.InlineKeyboardButton("❓ Помощь", callback_data="ab_help"))
     text = (
-        "🔒 *AnonymBox Bot*\n\n"
-        "Анонимная временная почта\n\n"
-        "/set <email> — Установить почту\n"
-        "/inbox — Проверить входящие\n"
-        "/info — Данные\n"
-        "/help — Справка"
+        "📧 *AnonymBox Bot*\n"
+        "Анонимная почта\n\n"
+        "/new — Создать почту\n"
+        "/set <email> — Установить\n"
+        "/inbox — Проверить\n"
+        "/key <API_KEY> — Установить ключ\n"
+        "/info — Данные"
     )
-    bot.send_message(msg.chat.id, text, parse_mode="Markdown", reply_markup=markup)
+    bot.send_message(m.chat.id, text, parse_mode="Markdown", reply_markup=kb)
+
+
+@bot.message_handler(commands=["new"])
+def cmd_new(m):
+    s = gs(m.chat.id)
+    rnd = "".join(random.choices(string.ascii_lowercase + string.digits, k=10))
+    addr = f"{rnd}@anonymbox.com"
+    s.update(addr=addr, seen=set())
+    bot.send_message(m.chat.id, f"✅ `{addr}`", parse_mode="Markdown")
 
 
 @bot.message_handler(commands=["set"])
-def cmd_set(msg):
-    parts = msg.text.split(maxsplit=1)
+def cmd_set(m):
+    parts = m.text.split(maxsplit=1)
     if len(parts) < 2:
-        bot.send_message(msg.chat.id, "Использование: /set <email>")
-        return
-    email = parts[1].strip()
-    sess = get_session(msg.chat.id)
-    sess["email"] = email
-    sess["seen_ids"] = set()
-    bot.send_message(msg.chat.id, f"✅ Почта: `{email}`", parse_mode="Markdown")
+        return bot.send_message(m.chat.id, "/set email@domain.com")
+    s = gs(m.chat.id)
+    s["addr"] = parts[1].strip()
+    s["seen"] = set()
+    bot.send_message(m.chat.id, f"✅ `{s['addr']}`", parse_mode="Markdown")
 
 
 @bot.message_handler(commands=["inbox"])
-def cmd_inbox(msg):
-    chat_id = msg.chat.id
-    sess = get_session(chat_id)
-    if not sess.get("email"):
-        bot.send_message(chat_id, "❌ Сначала: /set <email>")
-        return
-    data = api_get_inbox(sess["email"])
-    if isinstance(data, list):
-        if not data:
-            bot.send_message(chat_id, "📭 Ящик пуст")
-            return
-        text = f"📬 *{len(data)} писем:*\n\n"
-        for m in data[:15]:
-            mid = m.get("id", "?")
-            sender = m.get("from", "?")
-            subject = m.get("subject", "—")
-            text += f"🆔 `{mid}` | {sender}\n📝 {subject}\n\n"
-        bot.send_message(chat_id, text, parse_mode="Markdown")
-    elif isinstance(data, dict) and "error" in data:
-        bot.send_message(chat_id, f"❌ {data['error']}")
-    else:
-        bot.send_message(chat_id, "❌ Нет данных")
+def cmd_inbox(m):
+    s = gs(m.chat.id)
+    if not s.get("addr"):
+        return bot.send_message(m.chat.id, "❌ /new или /set email")
+    try:
+        r = requests.get(f"{BASE}/inbox/{s['addr']}", timeout=10)
+        if r.ok:
+            ct = r.headers.get("content-type", "")
+            data = r.json() if "json" in ct else []
+            if isinstance(data, list) and data:
+                txt = f"📬 *{len(data)} писем*\n\n"
+                for x in data[:15]:
+                    nid = x.get("id", "?")
+                    new = "🆕 " if nid not in s["seen"] else ""
+                    s["seen"].add(nid)
+                    txt += f"{new}`{nid}` | {x.get("from", "?")}\n📝 {x.get("subject", "—")}\n\n"
+                bot.send_message(m.chat.id, txt, parse_mode="Markdown")
+            else:
+                bot.send_message(m.chat.id, "📭 Пусто")
+        else:
+            bot.send_message(m.chat.id, "📭 Пусто или ошибка")
+    except Exception:
+        bot.send_message(m.chat.id, "❌ Сервис недоступен")
+
+
+@bot.message_handler(commands=["read"])
+def cmd_read(m):
+    parts = m.text.split(maxsplit=1)
+    if len(parts) < 2:
+        return bot.send_message(m.chat.id, "/read <ID>")
+    s = gs(m.chat.id)
+    if not s.get("addr"):
+        return bot.send_message(m.chat.id, "❌ /new")
+    try:
+        r = requests.get(f"{BASE}/inbox/{s['addr']}/{parts[1]}", timeout=10)
+        if r.ok:
+            d = r.json() if "json" in r.headers.get("content-type", "") else {}
+            body = d.get("text", d.get("html", "Нет содержимого"))[:3500]
+            bot.send_message(m.chat.id, f"📧 *Письмо*\n\n{body}", parse_mode="Markdown")
+        else:
+            bot.send_message(m.chat.id, "❌ Не найдено")
+    except Exception:
+        bot.send_message(m.chat.id, "❌ Ошибка")
+
+
+@bot.message_handler(commands=["key"])
+def cmd_key(m):
+    parts = m.text.split(maxsplit=1)
+    if len(parts) < 2:
+        return bot.send_message(m.chat.id, "/key YOUR_API_KEY")
+    s = gs(m.chat.id)
+    s["key"] = parts[1].strip()
+    bot.send_message(m.chat.id, f"✅ Ключ установлен: `{s['key'][:10]}...`", parse_mode="Markdown")
 
 
 @bot.message_handler(commands=["info"])
-def cmd_info(msg):
-    sess = get_session(msg.chat.id)
-    if not sess.get("email"):
-        bot.send_message(msg.chat.id, "❌ Почта не установлена")
-        return
-    text = (
+def cmd_info(m):
+    s = gs(m.chat.id)
+    txt = (
         f"📋 *Данные*\n\n"
-        f"📧 Адрес: `{sess['email']}`\n"
-        f"📩 Прочитано: {len(sess.get('seen_ids', []))}"
+        f"📧 Адрес: `{s.get('addr', '—')}`\n"
+        f"🔑 Ключ: `{str(s.get('key', '—'))[:10]}...`\n"
+        f"📩 Прочитано: {len(s.get('seen', []))}"
     )
-    bot.send_message(msg.chat.id, text, parse_mode="Markdown")
+    bot.send_message(m.chat.id, txt, parse_mode="Markdown")
 
 
 @bot.message_handler(commands=["help"])
-def cmd_help(msg):
+def cmd_help(m):
     text = (
-        "🔒 *AnonymBox Bot*\n\n"
-        "/set <email> — Установить почту\n"
+        "📧 *AnonymBox Bot*\n\n"
+        "/new — Создать\n"
+        "/set <email> — Установить\n"
         "/inbox — Проверить\n"
-        "/info — Данные\n\n"
-        "API: anonymbox.com (бесплатно)"
+        "/read <ID> — Прочитать\n"
+        "/key <KEY> — API ключ\n"
+        "/info — Данные"
     )
-    bot.send_message(msg.chat.id, text, parse_mode="Markdown")
+    bot.send_message(m.chat.id, text, parse_mode="Markdown")
 
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith("ab_"))
-def callback(call):
-    chat_id = call.message.chat.id
-    action = call.data.replace("ab_", "")
+@bot.callback_query_handler(func=lambda c: c.data.startswith("ab_"))
+def cb(call):
+    cid = call.message.chat.id
+    act = call.data.replace("ab_", "")
 
-    if action == "set":
-        bot.send_message(chat_id, "Введите: /set <email>")
+    if act == "new":
+        s = gs(cid)
+        rnd = "".join(random.choices(string.ascii_lowercase + string.digits, k=10))
+        addr = f"{rnd}@anonymbox.com"
+        s.update(addr=addr, seen=set())
+        bot.edit_message_text(f"✅ `{addr}`", cid, call.message.message_id, parse_mode="Markdown")
 
-    elif action == "inbox":
-        sess = get_session(chat_id)
-        if not sess.get("email"):
-            bot.answer_callback_query(call.id, "❌ /set <email>")
-            return
-        data = api_get_inbox(sess["email"])
-        if isinstance(data, list) and data:
-            text = f"📬 {len(data)} писем:\n\n"
-            for m in data[:10]:
-                text += f"🆔 {m.get('id')} | {m.get('from', '?')}\n📝 {m.get('subject', '—')}\n\n"
-            bot.edit_message_text(text, chat_id, call.message.message_id)
-        else:
-            bot.edit_message_text("📭 Пусто", chat_id, call.message.message_id)
+    elif act == "inbox":
+        s = gs(cid)
+        if not s.get("addr"):
+            return bot.answer_callback_query(call.id, "❌ /new")
+        try:
+            r = requests.get(f"{BASE}/inbox/{s['addr']}", timeout=10)
+            ct = r.headers.get("content-type", "")
+            data = r.json() if r.ok and "json" in ct else []
+            if isinstance(data, list) and data:
+                txt = f"📬 {len(data)} писем:\n\n"
+                for x in data[:10]:
+                    txt += f"`{x.get('id','?')}` | {x.get('from','?')}\n📝 {x.get('subject','—')}\n\n"
+                bot.edit_message_text(txt, cid, call.message.message_id)
+            else:
+                bot.edit_message_text("📭 Пусто", cid, call.message.message_id)
+        except Exception:
+            bot.edit_message_text("❌ Ошибка", cid, call.message.message_id)
 
-    elif action == "info":
-        sess = get_session(chat_id)
-        if sess.get("email"):
-            bot.answer_callback_query(call.id, sess["email"], show_alert=True)
+    elif act == "key":
+        bot.send_message(cid, "/key YOUR_API_KEY")
 
-    elif action == "help":
-        bot.send_message(chat_id, "/set — Установить\n/inbox — Проверить")
+    elif act == "info":
+        s = gs(cid)
+        bot.answer_callback_query(call.id, s.get("addr", "—"), show_alert=True)
+
+    elif act == "help":
+        bot.send_message(cid, "/new\n/inbox\n/info")
 
 
 if __name__ == "__main__":
-    print("[AnonymBox Bot] Запуск...")
+    print("[AnonymBox Bot] Running...")
     bot.infinity_polling()

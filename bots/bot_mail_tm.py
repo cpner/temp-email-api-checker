@@ -1,340 +1,163 @@
 #!/usr/bin/env python3
 """
-Telegram-бот: Временная почта через Mail.tm API
-Полноценный REST API: создание аккаунта, чтение почты
+Mail.tm Telegram Bot
+REST API: аккаунты, домены, чтение писем
+API: api.mail.tm
 """
-
 import telebot
 from telebot import types
 import requests
 import json
 import random
 import string
-import hashlib
+import time
+import os
+import re
 
-BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
+BOT_TOKEN = os.environ.get("BOT_TOKEN_MAIL_TM", "YOUR_TOKEN")
 bot = telebot.TeleBot(BOT_TOKEN)
 
-BASE_URL = "https://api.mail.tm"
+BASE = "https://api.mail.tm"
 
-user_sessions = {}
+sessions = {}
 
-
-def get_session(chat_id):
-    if chat_id not in user_sessions:
-        user_sessions[chat_id] = {
-            "address": None,
-            "token": None,
-            "password": None,
-            "account_id": None,
-            "seen_ids": set()
-        }
-    return user_sessions[chat_id]
+def get_sess(cid):
+    if cid not in sessions:
+        sessions[cid] = {"seen": set(), "addr": None, "token": None, "key": None}
+    return sessions[cid]
 
 
-def api_get_domains():
-    try:
-        r = requests.get(f"{BASE_URL}/domains", timeout=10)
-        return r.json()
-    except Exception as e:
-        return {"error": str(e)}
+def api_domains():
+    try: return requests.get(f"{BASE}/domains", timeout=10).json()
+    except: return {{"error": "timeout"}}
 
+def api_create(addr, pwd):
+    try: return requests.post(f"{BASE}/accounts", json={"address": addr, "password": pwd}, timeout=10).json()
+    except: return {{"error": "timeout"}}
 
-def api_create_account(address, password):
-    try:
-        r = requests.post(
-            f"{BASE_URL}/accounts",
-            json={"address": address, "password": password},
-            headers={"Content-Type": "application/json"},
-            timeout=10
-        )
-        return r.json()
-    except Exception as e:
-        return {"error": str(e)}
+def api_token(addr, pwd):
+    try: return requests.post(f"{BASE}/token", json={"address": addr, "password": pwd}, timeout=10).json()
+    except: return {{"error": "timeout"}}
 
+def api_messages(tok):
+    try: return requests.get(f"{BASE}/messages", headers={"Authorization": f"Bearer {tok}"}, timeout=10).json()
+    except: return {{"error": "timeout"}}
 
-def api_get_token(address, password):
-    try:
-        r = requests.post(
-            f"{BASE_URL}/token",
-            json={"address": address, "password": password},
-            headers={"Content-Type": "application/json"},
-            timeout=10
-        )
-        return r.json()
-    except Exception as e:
-        return {"error": str(e)}
+def api_read(tok, mid):
+    try: return requests.get(f"{BASE}/messages/{mid}", headers={"Authorization": f"Bearer {tok}"}, timeout=10).json()
+    except: return {{"error": "timeout"}}
 
-
-def api_get_messages(token):
-    try:
-        r = requests.get(
-            f"{BASE_URL}/messages",
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=10
-        )
-        return r.json()
-    except Exception as e:
-        return {"error": str(e)}
-
-
-def api_read_message(token, msg_id):
-    try:
-        r = requests.get(
-            f"{BASE_URL}/messages/{msg_id}",
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=10
-        )
-        return r.json()
-    except Exception as e:
-        return {"error": str(e)}
-
-
-def generate_password():
-    return ''.join(random.choices(string.ascii_letters + string.digits, k=16))
-
+def gen_pwd():
+    return ''.join(random.choices(string.ascii_letters+string.digits, k=16))
 
 @bot.message_handler(commands=["start"])
-def cmd_start(msg):
-    markup = types.InlineKeyboardMarkup(row_width=2)
-    markup.add(
-        types.InlineKeyboardButton("📧 Новая почта", callback_data="mtm_new"),
-        types.InlineKeyboardButton("📥 Входящие", callback_data="mtm_inbox"),
-        types.InlineKeyboardButton("🌐 Домены", callback_data="mtm_domains"),
-        types.InlineKeyboardButton("🔑 Войти", callback_data="mtm_login"),
-        types.InlineKeyboardButton("📋 Данные", callback_data="mtm_info"),
-        types.InlineKeyboardButton("❓ Помощь", callback_data="mtm_help")
-    )
-    text = (
-        "📨 *Mail.tm Bot*\n\n"
-        "Полноценная временная почта с REST API\n\n"
-        "/new — Создать почту\n"
-        "/inbox — Проверить входящие\n"
-        "/read <ID> — Прочитать письмо\n"
-        "/domains — Список доменов\n"
-        "/login — Войти в существующий\n"
-        "/info — Данные почты\n"
-        "/help — Справка"
-    )
-    bot.send_message(msg.chat.id, text, parse_mode="Markdown", reply_markup=markup)
+def cmd_start(m):
+    kb = types.InlineKeyboardMarkup(row_width=2)
+    kb.add(types.InlineKeyboardButton("📧 Новая", callback_data="mt_new"))
+    kb.add(types.InlineKeyboardButton("📥 Письма", callback_data="mt_inbox"))
+    kb.add(types.InlineKeyboardButton("🌐 Домены", callback_data="mt_domains"))
+    kb.add(types.InlineKeyboardButton("📋 Данные", callback_data="mt_info"))
+    bot.send_message(m.chat.id, "📨 *Mail.tm Bot*\n\n/new — Создать\n/inbox — Письма\n/read <ID> — Прочитать\n/domains — Домены\n/login — Войти", parse_mode="Markdown", reply_markup=kb)
 
 
 @bot.message_handler(commands=["new"])
-def cmd_new(msg):
-    chat_id = msg.chat.id
-    domains_data = api_get_domains()
-    domains = []
-    if "hydra:member" in domains_data:
-        domains = [d["domain"] for d in domains_data["hydra:member"]]
-    elif "hydra:iri" in domains_data:
-        try:
-            r = requests.get(f"{BASE_URL}/domains", timeout=10)
-            data = r.json()
-            if "hydra:member" in data:
-                domains = [d["domain"] for d in data["hydra:member"]]
-        except:
-            pass
-    if not domains:
-        bot.send_message(chat_id, "❌ Не удалось получить домены. Попробуйте позже.")
-        return
-    domain = random.choice(domains)
-    username = ''.join(random.choices(string.ascii_lowercase + string.digits, k=10))
-    address = f"{username}@{domain}"
-    password = generate_password()
-    result = api_create_account(address, password)
-    if "id" in result:
-        token_data = api_get_token(address, password)
-        sess = get_session(chat_id)
-        sess["address"] = address
-        sess["password"] = password
-        sess["account_id"] = result["id"]
-        sess["token"] = token_data.get("token")
-        sess["seen_ids"] = set()
-        text = (
-            f"✅ *Почта создана!*\n\n"
-            f"📧 Адрес: `{address}`\n"
-            f"🔑 Пароль: `{password}`\n"
-            f"🆔 ID: `{result['id'][:16]}...`\n\n"
-            f"Сохраните данные для повторного входа!"
-        )
-        bot.send_message(chat_id, text, parse_mode="Markdown")
-    else:
-        detail = result.get("detail", "Ошибка")
-        bot.send_message(chat_id, f"❌ {detail}")
-
-
-@bot.message_handler(commands=["domains"])
-def cmd_domains(msg):
-    data = api_get_domains()
-    if "hydra:member" in data:
-        domains = data["hydra:member"]
-        text = f"🌐 *Доступные домены ({len(domains)}):*\n\n"
-        for d in domains:
-            text += f"• `{d['domain']}`\n"
-        bot.send_message(msg.chat.id, text, parse_mode="Markdown")
-    else:
-        bot.send_message(msg.chat.id, "❌ Не удалось получить домены")
-
+def cmd_new(m):
+    d = api_domains()
+    doms = [x["domain"] for x in d.get("hydra:member", [])] if "hydra:member" in d else []
+    if not doms: return bot.send_message(m.chat.id, "❌ Нет доменов")
+    dom = random.choice(doms)
+    name = ''.join(random.choices(string.ascii_lowercase+string.digits, k=10))
+    addr = f"{name}@{dom}"
+    pwd = gen_pwd()
+    r = api_create(addr, pwd)
+    if "id" in r:
+        tok = api_token(addr, pwd).get("token")
+        s = get_sess(m.chat.id)
+        s.update(addr=addr, token=tok, pwd=pwd, seen=set())
+        bot.send_message(m.chat.id, f"✅ `{addr}`\n🔑 `{pwd}`", parse_mode="Markdown")
+    else: bot.send_message(m.chat.id, f"❌ {r.get('detail','Ошибка')}")
 
 @bot.message_handler(commands=["inbox"])
-def cmd_inbox(msg):
-    chat_id = msg.chat.id
-    sess = get_session(chat_id)
-    if not sess.get("token"):
-        bot.send_message(chat_id, "❌ Сначала создайте почту: /new")
-        return
-    data = api_get_messages(sess["token"])
-    messages = []
-    if isinstance(data, dict) and "hydra:member" in data:
-        messages = data["hydra:member"]
-    elif isinstance(data, list):
-        messages = data
-    if not messages:
-        bot.send_message(chat_id, "📭 *Ящик пуст*", parse_mode="Markdown")
-        return
-    text = f"📬 *{len(messages)} писем:*\n\n"
-    for m in messages[:20]:
-        mid = m.get("id", "?")
-        sender = m.get("from", {}).get("address", "Unknown") if isinstance(m.get("from"), dict) else str(m.get("from", "?"))
-        subject = m.get("subject", "Без темы")
-        is_new = mid not in sess["seen_ids"]
-        marker = "🆕 " if is_new else ""
-        if is_new:
-            sess["seen_ids"].add(mid)
-        text += f"{marker}🆔 `{mid}` | 👤 {sender}\n📝 {subject}\n\n"
-    bot.send_message(chat_id, text, parse_mode="Markdown")
-
+def cmd_inbox(m):
+    s = get_sess(m.chat.id)
+    if not s.get("token"): return bot.send_message(m.chat.id, "❌ /new")
+    d = api_messages(s["token"])
+    msgs = d.get("hydra:member", []) if isinstance(d, dict) else d if isinstance(d, list) else []
+    if not msgs: return bot.send_message(m.chat.id, "📭 Пусто")
+    txt = f"📬 *{len(msgs)} писем*\n\n"
+    for x in msgs[:15]:
+        fr = x.get("from", {}).get("address", "?") if isinstance(x.get("from"), dict) else "?"
+        txt += f"`{x.get('id','?')}` | {fr}\n📝 {x.get('subject','—')}\n\n"
+    bot.send_message(m.chat.id, txt, parse_mode="Markdown")
 
 @bot.message_handler(commands=["read"])
-def cmd_read(msg):
-    parts = msg.text.split(maxsplit=1)
-    if len(parts) < 2:
-        bot.send_message(msg.chat.id, "Использование: /read <ID>")
-        return
-    msg_id = parts[1].strip()
-    sess = get_session(msg.chat.id)
-    if not sess.get("token"):
-        bot.send_message(msg.chat.id, "❌ Сначала создайте почту: /new")
-        return
-    data = api_read_message(sess["token"], msg_id)
-    if "text" in data or "html" in data:
-        sender = data.get("from", {}).get("address", "?") if isinstance(data.get("from"), dict) else "?"
-        subject = data.get("subject", "Без темы")
-        body = data.get("text", data.get("html", "Нет содержимого"))
-        if len(body) > 3500:
-            body = body[:3500] + "\n\n... [обрезано]"
-        text = (
-            f"📧 *Письмо*\n\n"
-            f"👤 От: {sender}\n"
-            f"📝 Тема: {subject}\n\n"
-            f"---\n{body}"
-        )
-        bot.send_message(msg.chat.id, text, parse_mode="Markdown")
-    else:
-        bot.send_message(msg.chat.id, "❌ Письмо не найдено")
+def cmd_read(m):
+    parts = m.text.split(maxsplit=1)
+    if len(parts)<2: return bot.send_message(m.chat.id, "/read <ID>")
+    s = get_sess(m.chat.id)
+    if not s.get("token"): return bot.send_message(m.chat.id, "❌ /new")
+    d = api_read(s["token"], parts[1])
+    body = d.get("text", "")[:3500]
+    fr = d.get("from", {}).get("address", "?") if isinstance(d.get("from"), dict) else "?"
+    bot.send_message(m.chat.id, f"📧 *{d.get('subject','—')}*\nОт: {fr}\n\n{body}", parse_mode="Markdown")
 
+@bot.message_handler(commands=["domains"])
+def cmd_domains(m):
+    d = api_domains()
+    doms = d.get("hydra:member", []) if "hydra:member" in d else []
+    txt = "🌐 *Домены:*\n" + "\n".join(f"• `{x['domain']}`" for x in doms[:20])
+    bot.send_message(m.chat.id, txt, parse_mode="Markdown")
 
 @bot.message_handler(commands=["login"])
-def cmd_login(msg):
-    bot.send_message(
-        msg.chat.id,
-        "🔑 *Вход в почту*\n\n"
-        "Введите адрес и пароль через пробел:\n"
-        "`/login email@domain.com пароль`",
-        parse_mode="Markdown"
-    )
+def cmd_login(m):
+    parts = m.text.split(maxsplit=2)
+    if len(parts)<3: return bot.send_message(m.chat.id, "/login email password")
+    tok = api_token(parts[1], parts[2]).get("token")
+    if tok:
+        s = get_sess(m.chat.id)
+        s.update(addr=parts[1], token=tok, seen=set())
+        bot.send_message(m.chat.id, f"✅ Вход: `{parts[1]}`", parse_mode="Markdown")
+    else: bot.send_message(m.chat.id, "❌ Неверные данные")
 
+@bot.callback_query_handler(func=lambda c: c.data.startswith("mt_"))
+def cb(call):
+    cid = call.message.chat.id
+    act = call.data.replace("mt_", "")
 
-@bot.message_handler(func=lambda m: m.text and m.text.startswith("/login "))
-def do_login(msg):
-    parts = msg.text.split(maxsplit=2)
-    if len(parts) < 3:
-        bot.send_message(msg.chat.id, "Использование: /login <адрес> <пароль>")
-        return
-    address = parts[1]
-    password = parts[2]
-    token_data = api_get_token(address, password)
-    if "token" in token_data:
-        sess = get_session(msg.chat.id)
-        sess["address"] = address
-        sess["password"] = password
-        sess["token"] = token_data["token"]
-        sess["seen_ids"] = set()
-        bot.send_message(msg.chat.id, f"✅ Вход выполнен!\n📧 {address}")
-    else:
-        bot.send_message(msg.chat.id, "❌ Неверный адрес или пароль")
-
-
-@bot.message_handler(commands=["info"])
-def cmd_info(msg):
-    sess = get_session(msg.chat.id)
-    if not sess.get("address"):
-        bot.send_message(msg.chat.id, "❌ Почта не создана")
-        return
-    text = (
-        f"📋 *Данные почты*\n\n"
-        f"📧 Адрес: `{sess['address']}`\n"
-        f"🔑 Пароль: `{sess['password']}`\n"
-        f"🆔 ID: `{sess.get('account_id', '?')}`\n"
-        f"📩 Прочитано: {len(sess.get('seen_ids', []))}"
-    )
-    bot.send_message(msg.chat.id, text, parse_mode="Markdown")
-
-
-@bot.message_handler(commands=["help"])
-def cmd_help(msg):
-    text = (
-        "📨 *Mail.tm Bot*\n\n"
-        "/new — Создать почту\n"
-        "/inbox — Входящие\n"
-        "/read <ID> — Прочитать письмо\n"
-        "/domains — Доступные домены\n"
-        "/login <адрес> <пароль> — Войти\n"
-        "/info — Данные почты\n"
-        "/help — Справка\n\n"
-        "API: mail.tm (REST, бесплатно)"
-    )
-    bot.send_message(msg.chat.id, text, parse_mode="Markdown")
-
-
-@bot.callback_query_handler(func=lambda call: call.data.startswith("mtm_"))
-def callback(call):
-    chat_id = call.message.chat.id
-    action = call.data.replace("mtm_", "")
-
-    if action == "new":
-        bot.send_message(chat_id, "Создаю почту...")
-        msg = types.Message
-        msg.chat = types.Chat(chat_id, "private")
-        msg.text = "/new"
-        cmd_new(msg)
-
-    elif action == "inbox":
-        msg = types.Message
-        msg.chat = types.Chat(chat_id, "private")
-        msg.text = "/inbox"
-        cmd_inbox(msg)
-
-    elif action == "domains":
-        data = api_get_domains()
-        if "hydra:member" in data:
-            count = len(data["hydra:member"])
-            bot.answer_callback_query(call.id, f"Доступно доменов: {count}", show_alert=True)
-
-    elif action == "login":
-        bot.send_message(chat_id, "Введите: /login <адрес> <пароль>")
-
-    elif action == "info":
-        sess = get_session(chat_id)
-        if sess.get("address"):
-            bot.answer_callback_query(call.id, sess["address"], show_alert=True)
+    if act == "new":
+        d = api_domains()
+        doms = [x["domain"] for x in d.get("hydra:member",[])] if "hydra:member" in d else []
+        if not doms: return bot.answer_callback_query(call.id, "❌ Нет доменов")
+        dom = random.choice(doms)
+        name = ''.join(random.choices(string.ascii_lowercase+string.digits, k=10))
+        addr = f"{name}@{dom}"
+        pwd = gen_pwd()
+        r = api_create(addr, pwd)
+        if "id" in r:
+            tok = api_token(addr, pwd).get("token")
+            s = get_sess(cid)
+            s.update(addr=addr, token=tok, pwd=pwd, seen=set())
+            bot.edit_message_text(f"✅ `{addr}`", cid, call.message.message_id, parse_mode="Markdown")
+    elif act == "inbox":
+        s = get_sess(cid)
+        if not s.get("token"): return bot.answer_callback_query(call.id, "❌ /new")
+        d = api_messages(s["token"])
+        msgs = d.get("hydra:member", []) if isinstance(d, dict) else d if isinstance(d, list) else []
+        if not msgs: bot.edit_message_text("📭 Пусто", cid, call.message.message_id)
         else:
-            bot.answer_callback_query(call.id, "Нет почты")
-
-    elif action == "help":
-        bot.send_message(chat_id, "/new — Создать\n/inbox — Проверить\n/read <ID> — Прочитать")
-
+            txt = f"📬 {len(msgs)}:\n\n"
+            for x in msgs[:10]:
+                fr = x.get("from",{}).get("address","?") if isinstance(x.get("from"),dict) else "?"
+                txt += f"`{x.get('id','?')}` | {fr}\n📝 {x.get('subject','—')}\n\n"
+            bot.edit_message_text(txt, cid, call.message.message_id)
+    elif act == "domains":
+        d = api_domains()
+        doms = d.get("hydra:member",[]) if "hydra:member" in d else []
+        bot.answer_callback_query(call.id, f"Доменов: {len(doms)}", show_alert=True)
+    elif act == "info":
+        s = get_sess(cid)
+        bot.answer_callback_query(call.id, s.get("addr","—"), show_alert=True)
 
 if __name__ == "__main__":
-    print("[Mail.tm Bot] Запуск...")
+    print("[Mail.tm Bot] Running...")
     bot.infinity_polling()
