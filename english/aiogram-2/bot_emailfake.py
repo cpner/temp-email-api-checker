@@ -4,35 +4,22 @@ EmailFake Telegram Bot (aiogram 2.x)
 Provider: EmailFake | API: https://emailfake.com/api/v1
 Framework: aiogram 2.25.1
 Install: pip install aiogram==2.25.1 requests
-
-Features:
-- Create disposable email addresses
-- Check inbox for new messages
-- Real-time message monitoring
-- Comprehensive error handling
-- Rate limiting & retry logic
-- Usage statistics
-- Graceful shutdown
-
 Author: Vladislav Sofronov (cpner)
-Contact: feedback@gondon.su | t.me/reejb | gondon.su
 License: MIT
 """
+import asyncio, logging
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils import executor
-import requests
-import random, string, time, os, signal, sys, logging
+import requests, random, string, time, os, sys
 from typing import Optional, Dict, Any, Set
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("EmailFake")
 
-BOT_TOKEN: str = os.environ.get("BOT_TOKEN_EMAILFAKE", "YOUR_BOT_TOKEN")
-BASE_URL: str = "https://emailfake.com/api/v1"
-SERVICE_NAME: str = "EmailFake"
-REQUEST_TIMEOUT: int = 15
-MAX_RETRIES: int = 3
+BOT_TOKEN = os.environ.get("BOT_TOKEN_EMAILFAKE", "YOUR_BOT_TOKEN")
+BASE_URL = "https://emailfake.com/api/v1"
+SERVICE_NAME = "EmailFake"
 
 if not BOT_TOKEN or BOT_TOKEN == "YOUR_BOT_TOKEN":
     logger.error("BOT_TOKEN not set!")
@@ -43,62 +30,90 @@ dp = Dispatcher(bot)
 
 class UserSession:
     def __init__(self):
-        self.addr: Optional[str] = None
-        self.token: Optional[str] = None
-        self.key: Optional[str] = None
-        self.seen: Set[str] = set()
-        self.ts: float = 0
-        self.messages: int = 0
+        self.addr = None
+        self.token = None
+        self.key = None
+        self.seen = set()
+        self.ts = 0
+        self.messages = 0
 
-sessions: Dict[int, UserSession] = {}
-stats: Dict[str, int] = {"created": 0, "checked": 0, "errors": 0}
+sessions = {}
+stats = {"created": 0, "checked": 0, "errors": 0}
 
-def get_session(uid: int) -> UserSession:
+def get_session(uid):
     if uid not in sessions: sessions[uid] = UserSession()
     return sessions[uid]
 
-def api_get(path: str = "", params: Optional[Dict] = None, headers: Optional[Dict] = None) -> Dict:
-    url = f"{BASE_URL}{path}"
-    for attempt in range(MAX_RETRIES):
-        try:
-            r = requests.get(url, params=params, headers=headers or {}, timeout=REQUEST_TIMEOUT)
-            return r.json() if "json" in r.headers.get("content-type", "") else {"text": r.text[:500]}
-        except Exception as e:
-            logger.warning(f"API error: {e}")
-            if attempt < MAX_RETRIES - 1: time.sleep(1)
-    stats["errors"] += 1
-    return {"error": "Max retries exceeded"}
-
-def api_post(path: str = "", data: Optional[Dict] = None, headers: Optional[Dict] = None) -> Dict:
-    url = f"{BASE_URL}{path}"
+def api_get(path="", params=None, headers=None):
+    url = BASE_URL + path
     try:
-        r = requests.post(url, json=data, headers=headers or {}, timeout=REQUEST_TIMEOUT)
+        r = requests.get(url, params=params, headers=headers or {}, timeout=15)
         return r.json() if "json" in r.headers.get("content-type", "") else {"text": r.text[:500]}
     except Exception as e:
         stats["errors"] += 1
         return {"error": str(e)}
 
-def handle_new(c, s, call):
-    bot.send_message(cid,"Visit https://emailfake.com/api/v1")
 
-def handle_inbox(c, s, call):
-    bot.send_message(cid,"Visit https://emailfake.com/api/v1")
-
-@dp.message_handler(commands=["start", "menu"])
-async def cmd_start(m):
-    kb = InlineKeyboardMarkup(row_width=2) if false else InlineKeyboardMarkup(row_width=2)
+def make_kb():
+    kb = InlineKeyboardMarkup(row_width=2)
     kb.add(
         InlineKeyboardButton("📧 New Email", callback_data="new"),
         InlineKeyboardButton("📥 Inbox", callback_data="inbox"),
-        InlineKeyboardButton("📋 Info", callback_data="info"),
-        InlineKeyboardButton("📊 Stats", callback_data="stats"),
+    )
+    kb.add(
+        InlineKeyboardButton("ℹ️ Info", callback_data="info"),
+        InlineKeyboardButton("🔗 Source Code", callback_data="source"),
+    )
+    kb.add(
         InlineKeyboardButton("❓ Help", callback_data="help"),
     )
-    await bot.send_message(m.chat.id, "*{SERVICE_NAME}*\nTemporary Email Bot\n\n/new — Create\n/inbox — Check\n/set — Set email\n/info — Info\n/help — Help", reply_markup=kb)
+    return kb
 
-@dp.message_handler(["info"])
+
+@dp.message_handler(commands=["start", "menu"])
+async def cmd_start(m):
+    await m.answer("*EmailFake Bot*\\nSimple inbox monitoring\\n\\n*Features:*\\nSet email, check inbox\\n\\n*How to use:*\\n1. Tap 'New Email' to create\\n2. Copy the email address\\n3. Use it for registration\\n4. Tap 'Inbox' to check messages\\n5. New messages marked with emoji", reply_markup=make_kb())
+
+@dp.message_handler(commands=["new"])
+async def cmd_new(m):
+    c = m.chat.id
+    s = get_session(c)
+    r = api_get(params={"f": "get_email_address", "ip": "127.0.0.1", "agent": "Mozilla"})
+    if "email_addr" in r:
+        s.addr = r["email_addr"]
+        s.token = r.get("sid_token")
+        s.seen = set()
+        s.ts = time.time()
+        stats["created"] += 1
+        await m.answer("Created: `" + r["email_addr"] + "`")
+    else:
+        await m.answer("Failed. Try /new")
+
+@dp.message_handler(commands=["inbox"])
+async def cmd_inbox(m):
+    c = m.chat.id
+    s = get_session(c)
+    if not s.token:
+        return await m.answer("Create email first: /new")
+    r = api_get(params={"f": "check_email", "sid_token": s.token, "seq": 0})
+    msgs = r.get("list", [])
+    stats["checked"] += 1
+    if not msgs:
+        return await m.answer("Empty inbox")
+    t = str(len(msgs)) + " messages:\n\n"
+    for x in msgs[:15]:
+        s.seen.add(x.get("mail_id"))
+        t += x.get("mail_id", "?") + " - " + x.get("mail_from", "?") + " " + x.get("mail_subject", "-") + "\n"
+    await m.answer(t)
+
+@dp.message_handler(commands=["info"])
 async def cmd_info(m):
-    await bot.send_message(m.chat.id,f"*EmailFake*\n\n🌐 https://emailfake.com/api/v1\n\nVisit the website.")
+    await m.answer('*EmailFake Bot — Info*\\n\\n*Service:* EmailFake\\n*Description:* Simple inbox monitoring\\n*Features:* Set email, check inbox\\n*API:* `https://emailfake.com/api/v1`\\n*Website:* https://emailfake.com\\n*Source:* https://github.com/cpner/temp-email-api-checker/blob/main/en/aiogram-2/bot_emailfake.py\\n*Author:* Vladislav Sofronov (cpner)\\n*License:* MIT', reply_markup=make_kb())
+
+@dp.message_handler(commands=["help"])
+async def cmd_help(m):
+    await m.answer('*EmailFake Bot — Commands*\\n\\n/start — Main menu\\n/new — Create email\\n/inbox — Check messages\\n/set — Set email manually\\n/info — Bot information\\n/help — This help\\n\\n*Buttons:*\\n📧 New Email — Create address\\n📥 Inbox — Check messages\\nℹ️ Info — Bot details\\n🔗 Source — GitHub link\\n❓ Help — Usage guide', reply_markup=make_kb())
+
 
 @dp.callback_query_handler(lambda c: True)
 async def cb(call):
@@ -106,25 +121,41 @@ async def cb(call):
     a = call.data
     try:
         s = get_session(c)
-        if a == "new": handle_new(c, s, call)
-        elif a == "inbox": handle_inbox(c, s, call)
+        if a == "new":
+            r = api_get(params={"f": "get_email_address", "ip": "127.0.0.1", "agent": "Mozilla"})
+            if "email_addr" in r:
+                s.addr = r["email_addr"]
+                s.token = r.get("sid_token")
+                s.seen = set()
+                s.ts = time.time()
+                stats["created"] += 1
+                await bot.edit_message_text("Created: `" + r["email_addr"] + "`", c, call.message.message_id)
+            else:
+                await call.answer("Failed")
+        elif a == "inbox":
+            if not s.token:
+                return await call.answer("Create email first")
+            r = api_get(params={"f": "check_email", "sid_token": s.token, "seq": 0})
+            msgs = r.get("list", [])
+            stats["checked"] += 1
+            if not msgs:
+                await bot.edit_message_text("Empty inbox", c, call.message.message_id)
+            else:
+                txt = ""
+                for x in msgs[:10]:
+                    s.seen.add(x.get("mail_id"))
+                    txt += x.get("mail_id", "?") + " - " + x.get("mail_from", "?") + " " + x.get("mail_subject", "-") + "\n"
+                await bot.edit_message_text(str(len(msgs)) + " messages:\n\n" + txt, c, call.message.message_id)
         elif a == "info":
-            await bot.answer_callback_query(call.id, f"Email: {s.addr or 'Not set'}", show_alert=True)
-        elif a == "stats":
-            await bot.answer_callback_query(call.id, f"Created: {stats['created']} | Checked: {stats['checked']}", show_alert=True)
+            await call.answer("Name: " + name + "\nAPI: " + url, show_alert=True)
+        elif a == "source":
+            await bot.send_message(c, "Source code: " + source_url)
         elif a == "help":
-            await bot.send_message(c, "/new — Create\n/inbox — Check\n/set — Set\n/info — Info")
+            await bot.send_message(c, '*EmailFake Bot — Commands*\\n\\n/start — Main menu\\n/new — Create email\\n/inbox — Check messages\\n/set — Set email manually\\n/info — Bot information\\n/help — This help\\n\\n*Buttons:*\\n📧 New Email — Create address\\n📥 Inbox — Check messages\\nℹ️ Info — Bot details\\n🔗 Source — GitHub link\\n❓ Help — Usage guide', reply_markup=make_kb())
     except Exception as e:
-        logger.error(f"Error: {e}")
-        await bot.answer_callback_query(call.id, "Error")
-
-
-def signal_handler(sig, frame):
-    logger.info("Shutting down...")
-    sys.exit(0)
-signal.signal(signal.SIGINT, signal_handler)
-signal.signal(signal.SIGTERM, signal_handler)
+        logger.error("Error: " + str(e))
+        await call.answer(err)
 
 if __name__ == "__main__":
-    logger.info(f"Starting {SERVICE_NAME}...")
+    logger.info("Starting " + SERVICE_NAME + "...")
     executor.start_polling(dp, skip_updates=True)
