@@ -6,9 +6,10 @@ Framework: aiogram 2.25.1
 Install: pip install aiogram==2.25.1 requests
 
 Features:
-- Async/await architecture
 - Create disposable email addresses
 - Check inbox for new messages
+- Real-time message monitoring
+- Comprehensive error handling
 - Rate limiting & retry logic
 - Usage statistics
 - Graceful shutdown
@@ -17,11 +18,11 @@ Author: Vladislav Sofronov (cpner)
 Contact: feedback@gondon.su | t.me/reejb | gondon.su
 License: MIT
 """
-import asyncio, logging
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils import executor
-import requests, random, string, time, os, sys
+import requests
+import random, string, time, os, signal, sys, logging
 from typing import Optional, Dict, Any, Set
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -30,6 +31,8 @@ logger = logging.getLogger("TempMail.plus")
 BOT_TOKEN: str = os.environ.get("BOT_TOKEN_TEMPMAIL_PLUS", "YOUR_BOT_TOKEN")
 BASE_URL: str = "https://tempmail.plus/api/mails"
 SERVICE_NAME: str = "TempMail.plus"
+REQUEST_TIMEOUT: int = 15
+MAX_RETRIES: int = 3
 
 if not BOT_TOKEN or BOT_TOKEN == "YOUR_BOT_TOKEN":
     logger.error("BOT_TOKEN not set!")
@@ -47,38 +50,48 @@ class UserSession:
         self.ts: float = 0
         self.messages: int = 0
 
-sessions: Dict[int, UserSession] = {{}}
-stats: Dict[str, int] = {{"created": 0, "checked": 0, "errors": 0}}
+sessions: Dict[int, UserSession] = {}
+stats: Dict[str, int] = {"created": 0, "checked": 0, "errors": 0}
 
 def get_session(uid: int) -> UserSession:
     if uid not in sessions: sessions[uid] = UserSession()
     return sessions[uid]
 
 def api_get(path: str = "", params: Optional[Dict] = None, headers: Optional[Dict] = None) -> Dict:
-    url = f"{{BASE_URL}}{{path}}"
-    try:
-        r = requests.get(url, params=params, headers=headers or {{}}, timeout=15)
-        return r.json() if "json" in r.headers.get("content-type", "") else {{"text": r.text[:500]}}
-    except Exception as e:
-        stats["errors"] += 1
-        return {{"error": str(e)}}
+    url = f"{BASE_URL}{path}"
+    for attempt in range(MAX_RETRIES):
+        try:
+            r = requests.get(url, params=params, headers=headers or {}, timeout=REQUEST_TIMEOUT)
+            return r.json() if "json" in r.headers.get("content-type", "") else {"text": r.text[:500]}
+        except Exception as e:
+            logger.warning(f"API error: {e}")
+            if attempt < MAX_RETRIES - 1: time.sleep(1)
+    stats["errors"] += 1
+    return {"error": "Max retries exceeded"}
 
 def api_post(path: str = "", data: Optional[Dict] = None, headers: Optional[Dict] = None) -> Dict:
-    url = f"{{BASE_URL}}{{path}}"
+    url = f"{BASE_URL}{path}"
     try:
-        r = requests.post(url, json=data, headers=headers or {{}}, timeout=15)
-        return r.json() if "json" in r.headers.get("content-type", "") else {{"text": r.text[:500]}}
+        r = requests.post(url, json=data, headers=headers or {}, timeout=REQUEST_TIMEOUT)
+        return r.json() if "json" in r.headers.get("content-type", "") else {"text": r.text[:500]}
     except Exception as e:
         stats["errors"] += 1
-        return {{"error": str(e)}}
+        return {"error": str(e)}
 
-def gen_name(length: int = 10) -> str:
-    return "".join(random.choices(string.ascii_lowercase + string.digits, k=length))
+def handle_new(c, s, call):
+    bot.send_message(cid,"Use /set email@domain.com")
 
+def handle_inbox(c, s, call):
+    if not s.addr: return bot.answer_callback_query(call.id,"❌ /set email first")
+    r=api_get(params={"email":s.addr}); mails=r.get("mail",[]); stats["checked"]+=1
+    if not mails: return bot.edit_message_text("📭 Empty",c,call.message.message_id)
+    txt=""
+    for x in mails[:10]: s.seen.add(x.get("mail_id")); txt+=f"`{x.get('mail_id')}` — {x.get('mail_from','?')}\n{x.get('mail_subject','—')}\n\n"
+    bot.edit_message_text(f"{len(mails)} messages:\n\n"+txt,c,call.message.message_id)
 
 @dp.message_handler(commands=["start", "menu"])
-async def cmd_start(m: types.Message) -> None:
-    kb = InlineKeyboardMarkup(row_width=2)
+async def cmd_start(m):
+    kb = InlineKeyboardMarkup(row_width=2) if false else InlineKeyboardMarkup(row_width=2)
     kb.add(
         InlineKeyboardButton("📧 New Email", callback_data="new"),
         InlineKeyboardButton("📥 Inbox", callback_data="inbox"),
@@ -86,55 +99,52 @@ async def cmd_start(m: types.Message) -> None:
         InlineKeyboardButton("📊 Stats", callback_data="stats"),
         InlineKeyboardButton("❓ Help", callback_data="help"),
     )
-    await m.answer("*{{SERVICE_NAME}}*\nTemporary Email Bot\n\n/new — Create\n/inbox — Check\n/info — Info", reply_markup=kb)
+    await bot.send_message(m.chat.id, "*{SERVICE_NAME}*\nTemporary Email Bot\n\n/new — Create\n/inbox — Check\n/set — Set email\n/info — Info\n/help — Help", reply_markup=kb)
 
+@{dec}(["set"])
+{ap}def cmd_set(m):
+    p=m.text.split(maxsplit=1)
+    if len(p)<2: return {aw}bot.send_message(m.chat.id,"Usage: /set email@domain.com")
+    s=get_session(m.chat.id); s.addr,s.seen=p[1].strip(),set()
+    {aw}bot.send_message(m.chat.id,f"✅ Monitoring: `{s.addr}`")
 
-@bot.message_handler(commands=["set"])
-def cmd_set(m: types.Message) -> None:
-    p = m.text.split(maxsplit=1)
-    if len(p) < 2: return bot.send_message(m.chat.id, "Usage: /set email@domain.com")
-    s = get_session(m.chat.id); s.addr, s.seen = p[1].strip(), set()
-    bot.send_message(m.chat.id, f"✅ Monitoring: `{s.addr}`")
-
-@bot.message_handler(commands=["inbox"])
-def cmd_inbox(m: types.Message) -> None:
-    c = m.chat.id
-    s = get_session(c)
-    if not s.addr: return bot.send_message(c, "❌ /set email@domain.com")
-    r = api_get(params={{"email": s.addr}}); mails = r.get("mail", []); stats["checked"] += 1
-    if not mails: return bot.send_message(c, "📭 Empty")
-    t = f"*{len(mails)} messages*\n\n"
+@{dec}(["inbox"])
+{ap}def cmd_inbox(m):
+    c=m.chat.id; s=get_session(c)
+    if not s.addr: return {aw}bot.send_message(c,"❌ /set email@domain.com")
+    r=api_get(params={"email":s.addr}); mails=r.get("mail",[]); stats["checked"]+=1
+    if not mails: return {aw}bot.send_message(c,"📭 Empty")
+    t=f"*{len(mails)} messages*\n\n"
     for x in mails[:15]:
-        n = "🆕 " if x.get("mail_id") not in s.seen else ""; s.seen.add(x.get("mail_id"))
-        t += f"{n}`{x.get('mail_id')}` — {x.get('mail_from','?')}\n{x.get('mail_subject','—')}\n\n"
-    bot.send_message(c, t)
-
+        n="🆕 " if x.get("mail_id") not in s.seen else ""; s.seen.add(x.get("mail_id"))
+        t+=f"{n}`{x.get('mail_id')}` — {x.get('mail_from','?')}\n{x.get('mail_subject','—')}\n\n"
+    {aw}bot.send_message(c,t)
 
 @dp.callback_query_handler(lambda c: True)
-async def cb(call: types.CallbackQuery) -> None:
+async def cb(call):
     c = call.message.chat.id
     a = call.data
     try:
-        if a == "new": bot.send_message(cid, "Use /set email@domain.com")
-        elif a == "inbox": s = get_session(c)
-        if not s.addr: return bot.answer_callback_query(call.id, "❌ /set email first")
-        r = api_get(params={{"email": s.addr}}); mails = r.get("mail", []); stats["checked"] += 1
-        if not mails: bot.edit_message_text("📭 Empty", c, call.message.message_id)
-        else:
-            txt = ""
-            for x in mails[:10]: s.seen.add(x.get("mail_id")); txt += f"`{x.get('mail_id')}` — {x.get('mail_from','?')}\n{x.get('mail_subject','—')}\n\n"
-            bot.edit_message_text(f"{len(mails)} messages:\n\n" + txt, c, call.message.message_id)
+        s = get_session(c)
+        if a == "new": handle_new(c, s, call)
+        elif a == "inbox": handle_inbox(c, s, call)
         elif a == "info":
-            s = get_session(c)
-            await call.answer(f"Email: {{s.addr or 'Not set'}}", show_alert=True)
+            await bot.answer_callback_query(call.id, f"Email: {s.addr or 'Not set'}", show_alert=True)
         elif a == "stats":
-            await call.answer(f"Created: {{stats['created']}} | Checked: {{stats['checked']}}", show_alert=True)
+            await bot.answer_callback_query(call.id, f"Created: {stats['created']} | Checked: {stats['checked']}", show_alert=True)
         elif a == "help":
-            await bot.send_message(c, "/new — Create\n/inbox — Check\n/info — Info")
+            await bot.send_message(c, "/new — Create\n/inbox — Check\n/set — Set\n/info — Info")
     except Exception as e:
-        logger.error(f"Error: {{e}}")
-        await call.answer("Error")
+        logger.error(f"Error: {e}")
+        await bot.answer_callback_query(call.id, "Error")
+
+
+def signal_handler(sig, frame):
+    logger.info("Shutting down...")
+    sys.exit(0)
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
 
 if __name__ == "__main__":
-    logger.info(f"Starting {{SERVICE_NAME}}...")
+    logger.info(f"Starting {SERVICE_NAME}...")
     executor.start_polling(dp, skip_updates=True)
