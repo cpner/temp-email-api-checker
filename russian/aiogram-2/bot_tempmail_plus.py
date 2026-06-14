@@ -7,89 +7,32 @@ API: https://tempmail.plus/api/mails
 Framework: aiogram 2.25.1
 Install: pip install aiogram==2.25.1 requests
 
-Возможности:
-- Async/await architecture
-- Create disposable email addresses
-- Check inbox for new messages
-
-Автор: Владислав Софронов (cpner)
-Контакт: feedback@gondon.su | t.me/icesq | gondon.su
-Код: https://github.com/cpner/temp-email-api-checker/blob/main/russian/aiogram-2/bot_tempmail_plus.py
-Лицензия: MIT
+Author: Владислав Софронов (@icesq)
+Contact: feedback@gondon.su | t.me/icesq | gondon.su
+Source: https://github.com/cpner/temp-email-api-checker/blob/main/russian/aiogram-2/bot_tempmail_plus.py
+License: MIT
 """
-
-import asyncio
-import logging
+import asyncio, logging
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils import executor
-import requests
-import random
-import string
-import time
-import os
-import sys
+import requests, random, string, time, os, sys
 from typing import Optional, Dict, Any, Set
 
-# Logging configuration
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("TempMail.plus")
 
-# Bot configuration
 BOT_TOKEN = os.environ.get("BOT_TOKEN_TEMPMAIL_PLUS", "YOUR_BOT_TOKEN")
 BASE_URL = "https://tempmail.plus/api/mails"
-SERVICE_NAME = "TempMail.plus"
 
 if not BOT_TOKEN or BOT_TOKEN == "YOUR_BOT_TOKEN":
-    logger.error("Не задан BOT_TOKEN!")
+    logger.error("BOT_TOKEN not set!")
     sys.exit(1)
 
 bot = Bot(token=BOT_TOKEN, parse_mode="Markdown")
 dp = Dispatcher(bot)
 
-# Button labels
-BTN_NEW = "📧 Новая почта"
-BTN_INBOX = "📥 Входящие"
-BTN_INFO = "ℹ️ Инфо"
-BTN_SOURCE = "🔗 Исходный код"
-BTN_HELP = "❓ Помощь"
-
-# Text messages
-SOURCE_URL = "https://github.com/cpner/temp-email-api-checker/blob/main/russian/aiogram-2/bot_tempmail_plus.py"
-
-START_TEXT = """*TempMail.plus Bot*
-Мониторинг почты любых провайдеров
-
-*Возможности:*
-Gmail, Yahoo, Outlook, 13 доменов
-
-*Как пользоваться:*
-1. Tap Новая почта
-2. Copy address
-3. Use for registration
-4. Tap Входящие to check"""
-
-INFO_TEXT = """*TempMail.plus — Инфо*
-
-*Service:* TempMail.plus
-*Description:* Мониторинг почты любых провайдеров
-*API:* `https://tempmail.plus/api/mails`
-*Website:* https://tempmail.plus
-*Код:* """ + SOURCE_URL + """
-*Автор:* Владислав Софронов (cpner)
-*Лицензия:* MIT"""
-
-HELP_TEXT = """*TempMail.plus — Commands*
-
-/start — Главное меню
-/new — Создать почту
-/inbox — Проверить письма
-/info — Инфо
-/help — Помощь"""
-
-
 class UserSession:
-    """Stores user state."""
     def __init__(self):
         self.addr = None
         self.token = None
@@ -100,17 +43,14 @@ sessions = {}
 stats = {"created": 0, "checked": 0, "errors": 0}
 
 def get_session(uid):
-    """Get user session."""
     if uid not in sessions: sessions[uid] = UserSession()
     return sessions[uid]
 
 def api_get(path="", params=None, headers=None):
-    """GET request with retry."""
     url = BASE_URL + path
+    default_headers = {"User-Agent": "Mozilla/5.0"}
+    if headers: default_headers.update(headers)
     try:
-        default_headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-        if headers:
-            default_headers.update(headers)
         r = requests.get(url, params=params, headers=default_headers, timeout=15)
         return r.json() if "json" in r.headers.get("content-type", "") else {"text": r.text[:500]}
     except Exception as e:
@@ -118,58 +58,84 @@ def api_get(path="", params=None, headers=None):
         return {"error": str(e)}
 
 def handle_new(uid, s):
-    """Create new email."""
     return "Используйте /set email@domain.com"
 
 def handle_inbox(uid, s):
-    """Check inbox."""
     if not s.addr: return "Установите почту"
-    r = api_get(params={{"email":s.addr}}); mails = r.get("mail",[]); stats["checked"] += 1
+    result = api_get(params={"email": s.addr})
+    mails = result.get("mail", [])
+    stats["checked"] += 1
     if not mails: return "Пусто"
     t = str(len(mails)) + " писем:\n"
-    for m in mails[:15]: s.seen.add(m.get("mail_id")); t += m.get("mail_id","?")+" | "+m.get("mail_from","?")+" | "+m.get("mail_subject","-")+"\n"
+    for m in mails[:15]:
+        mid = m.get("mail_id", "?")
+        marker = "🆕 " if mid not in s.seen else ""
+        s.seen.add(mid)
+        t += marker + mid + " | " + m.get("mail_from", "?") + " | " + m.get("mail_subject", "-") + "\n"
     return t
 
-def make_kb():
-    """Build keyboard."""
-    kb = InlineKeyboardMarkup(row_width=2)
-    kb.add(InlineKeyboardButton(BTN_NEW, callback_data="new"), InlineKeyboardButton(BTN_INBOX, callback_data="inbox"))
-    kb.add(InlineKeyboardButton(BTN_INFO, callback_data="info"), InlineKeyboardButton(BTN_SOURCE, callback_data="source"))
-    kb.add(InlineKeyboardButton(BTN_HELP, callback_data="help"))
-    return kb
+def handle_set(text, s):
+    parts = text.split(maxsplit=1)
+    if len(parts) < 2: return "Использование: /set email@domain.com"
+    s.addr = parts[1].strip()
+    s.seen = set()
+    return "Мониторинг: " + s.addr
 
+def make_kb():
+    kb = InlineKeyboardMarkup(row_width=2)
+    kb.add(InlineKeyboardButton("📧 Установить", callback_data="new"), InlineKeyboardButton("📥 Входящие", callback_data="inbox"))
+    kb.add(InlineKeyboardButton("ℹ️ Инфо", callback_data="info"), InlineKeyboardButton("🔗 Код", callback_data="source"))
+    kb.add(InlineKeyboardButton("❓ Помощь", callback_data="help"))
+    return kb
 
 @dp.message_handler(commands=["start", "menu"])
 async def cmd_start(m):
-    """Show welcome message."""
-    await m.answer(START_TEXT, reply_markup=make_kb())
+    await m.answer("TempMail.plus Бот
+Мониторинг почты любых провайдеров
 
-@dp.message_handler(commands=["new"])
-async def cmd_new(m):
-    """Create new email."""
+Возможности:
+Gmail, Yahoo, Outlook, 13 доменов
+
+Как пользоваться:
+1. Нажмите Установить
+2. Введите email
+3. Нажмите Входящие", reply_markup=make_kb())
+
+@dp.message_handler(commands=["set"])
+async def cmd_set(m):
     s = get_session(m.chat.id)
-    await m.answer(handle_new(m.chat.id, s))
+    await m.answer(handle_set(m.text, s))
 
 @dp.message_handler(commands=["inbox"])
 async def cmd_inbox(m):
-    """Check inbox."""
     s = get_session(m.chat.id)
     await m.answer(handle_inbox(m.chat.id, s))
 
 @dp.message_handler(commands=["info"])
 async def cmd_info(m):
-    """Show info."""
-    await m.answer(INFO_TEXT, reply_markup=make_kb())
+    await m.answer("TempMail.plus — Инфо
+
+Сервис: TempMail.plus
+Описание: Мониторинг почты любых провайдеров
+Возможности: Gmail, Yahoo, Outlook, 13 доменов
+API: https://tempmail.plus/api/mails
+Сайт: https://tempmail.plus
+Код: https://github.com/cpner/temp-email-api-checker/blob/main/russian/aiogram-2/bot_tempmail_plus.py
+Автор: Владислав Софронов (@icesq)
+Лицензия: MIT", reply_markup=make_kb())
 
 @dp.message_handler(commands=["help"])
 async def cmd_help(m):
-    """Show help."""
-    await m.answer(HELP_TEXT, reply_markup=make_kb())
+    await m.answer("TempMail.plus — Команды
 
+/start — Главное меню
+/set — Установить
+/inbox — Проверить
+/info — Инфо
+/help — Помощь", reply_markup=make_kb())
 
 @dp.callback_query_handler(lambda c: True)
 async def cb(call):
-    """Handle buttons. Edit current message."""
     c = call.message.chat.id
     s = get_session(c)
     try:
@@ -178,15 +144,33 @@ async def cb(call):
         elif call.data == "inbox":
             await bot.edit_message_text(handle_inbox(c, s), c, call.message.message_id, reply_markup=make_kb())
         elif call.data == "info":
-            await bot.edit_message_text(INFO_TEXT, c, call.message.message_id, reply_markup=make_kb())
+            await bot.edit_message_text("TempMail.plus — Инфо
+
+Сервис: TempMail.plus
+Описание: Мониторинг почты любых провайдеров
+Возможности: Gmail, Yahoo, Outlook, 13 доменов
+API: https://tempmail.plus/api/mails
+Сайт: https://tempmail.plus
+Код: https://github.com/cpner/temp-email-api-checker/blob/main/russian/aiogram-2/bot_tempmail_plus.py
+Автор: Владислав Софронов (@icesq)
+Лицензия: MIT", c, call.message.message_id, reply_markup=make_kb())
         elif call.data == "source":
-            await bot.edit_message_text("Код: " + SOURCE_URL, c, call.message.message_id, reply_markup=make_kb())
+            await bot.edit_message_text("Source: " + "https://github.com/cpner/temp-email-api-checker/blob/main/russian/aiogram-2/bot_tempmail_plus.py", c, call.message.message_id, reply_markup=make_kb())
         elif call.data == "help":
-            await bot.edit_message_text(HELP_TEXT, c, call.message.message_id, reply_markup=make_kb())
+            await bot.edit_message_text("TempMail.plus — Команды
+
+/start — Главное меню
+/set — Установить
+/inbox — Проверить
+/info — Инфо
+/help — Помощь", c, call.message.message_id, reply_markup=make_kb())
     except Exception as e:
-        logger.error(str(e))
-        await call.answer("Ошибка")
+        if "message is not modified" in str(e):
+            await call.answer()
+        else:
+            logger.error(str(e))
+            await call.answer("Ошибка")
 
 if __name__ == "__main__":
-    logger.info("Запуск " + SERVICE_NAME + "...")
+    logger.info("Starting TempMail.plus...")
     executor.start_polling(dp, skip_updates=True)

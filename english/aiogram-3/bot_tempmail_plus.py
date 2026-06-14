@@ -7,37 +7,22 @@ API: https://tempmail.plus/api/mails
 Framework: aiogram >=3.28.2
 Install: pip install "aiogram>=3.28.2" requests
 
-Features:
-- Modern async/await architecture
-- Create disposable email addresses
-- Check inbox for new messages
-
-Author: Vladislav Sofronov (@icesq)
+Author: Владислав Софронов (@icesq)
 Contact: feedback@gondon.su | t.me/icesq | gondon.su
-Source: https://github.com/cpner/temp-email-api-checker/blob/main/english/aiogram-2/bot_tempmail_plus.py
+Source: https://github.com/cpner/temp-email-api-checker/blob/main/english/aiogram-3/bot_tempmail_plus.py
 License: MIT
 """
-
-import asyncio
-import logging
+import asyncio, logging
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-import requests
-import random
-import string
-import time
-import os
-import sys
+import requests, random, string, time, os, sys
 from typing import Optional, Dict, Any, Set
 
-# Logging configuration
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("TempMail.plus")
 
-# Bot configuration
 BOT_TOKEN = os.environ.get("BOT_TOKEN_TEMPMAIL_PLUS", "YOUR_BOT_TOKEN")
 BASE_URL = "https://tempmail.plus/api/mails"
-SERVICE_NAME = "TempMail.plus"
 
 if not BOT_TOKEN or BOT_TOKEN == "YOUR_BOT_TOKEN":
     logger.error("BOT_TOKEN not set!")
@@ -46,49 +31,7 @@ if not BOT_TOKEN or BOT_TOKEN == "YOUR_BOT_TOKEN":
 bot = Bot(token=BOT_TOKEN, parse_mode="Markdown")
 dp = Dispatcher()
 
-# Button labels
-BTN_NEW = "📧 New Email"
-BTN_INBOX = "📥 Inbox"
-BTN_INFO = "ℹ️ Info"
-BTN_SOURCE = "🔗 Source Code"
-BTN_HELP = "❓ Help"
-
-# Text messages
-SOURCE_URL = "https://github.com/cpner/temp-email-api-checker/blob/main/english/aiogram-2/bot_tempmail_plus.py"
-
-START_TEXT = """*TempMail.plus Bot*
-Monitor inbox for any email provider
-
-*Features:*
-Gmail, Yahoo, Outlook, 13 domains
-
-*How to use:*
-1. Tap New Email
-2. Copy address
-3. Use for registration
-4. Tap Inbox to check"""
-
-INFO_TEXT = """*TempMail.plus — Info*
-
-*Service:* TempMail.plus
-*Description:* Monitor inbox for any email provider
-*API:* `https://tempmail.plus/api/mails`
-*Website:* https://tempmail.plus
-*Source:* """ + SOURCE_URL + """
-*Author:* Vladislav Sofronov (@icesq)
-*License:* MIT"""
-
-HELP_TEXT = """*TempMail.plus — Commands*
-
-/start — Main menu
-/new — Create email
-/inbox — Check messages
-/info — Bot info
-/help — This help"""
-
-
 class UserSession:
-    """Stores user state."""
     def __init__(self):
         self.addr = None
         self.token = None
@@ -99,17 +42,14 @@ sessions = {}
 stats = {"created": 0, "checked": 0, "errors": 0}
 
 def get_session(uid):
-    """Get user session."""
     if uid not in sessions: sessions[uid] = UserSession()
     return sessions[uid]
 
 def api_get(path="", params=None, headers=None):
-    """GET request with retry."""
     url = BASE_URL + path
+    default_headers = {"User-Agent": "Mozilla/5.0"}
+    if headers: default_headers.update(headers)
     try:
-        default_headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-        if headers:
-            default_headers.update(headers)
         r = requests.get(url, params=params, headers=default_headers, timeout=15)
         return r.json() if "json" in r.headers.get("content-type", "") else {"text": r.text[:500]}
     except Exception as e:
@@ -117,76 +57,115 @@ def api_get(path="", params=None, headers=None):
         return {"error": str(e)}
 
 def handle_new(uid, s):
-    """Create new email."""
-    return "Use /set email@domain.com"
+    return "Используйте /set email@domain.com"
 
 def handle_inbox(uid, s):
-    """Check inbox."""
-    if not s.addr: return "Set email first"
-    r = api_get(params={{"email":s.addr}}); mails = r.get("mail",[]); stats["checked"] += 1
-    if not mails: return "Empty inbox"
-    t = str(len(mails)) + " messages:\n"
-    for m in mails[:15]: s.seen.add(m.get("mail_id")); t += m.get("mail_id","?")+" | "+m.get("mail_from","?")+" | "+m.get("mail_subject","-")+"\n"
+    if not s.addr: return "Установите почту"
+    result = api_get(params={"email": s.addr})
+    mails = result.get("mail", [])
+    stats["checked"] += 1
+    if not mails: return "Пусто"
+    t = str(len(mails)) + " писем:\n"
+    for m in mails[:15]:
+        mid = m.get("mail_id", "?")
+        marker = "🆕 " if mid not in s.seen else ""
+        s.seen.add(mid)
+        t += marker + mid + " | " + m.get("mail_from", "?") + " | " + m.get("mail_subject", "-") + "\n"
     return t
 
-def make_kb():
-    """Build keyboard."""
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=BTN_NEW, callback_data="new"), InlineKeyboardButton(text=BTN_INBOX, callback_data="inbox")],
-        [InlineKeyboardButton(text=BTN_INFO, callback_data="info"), InlineKeyboardButton(text=BTN_SOURCE, callback_data="source")],
-        [InlineKeyboardButton(text=BTN_HELP, callback_data="help")],
-    ])
+def handle_set(text, s):
+    parts = text.split(maxsplit=1)
+    if len(parts) < 2: return "Использование: /set email@domain.com"
+    s.addr = parts[1].strip()
+    s.seen = set()
+    return "Мониторинг: " + s.addr
 
+def make_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📧 Установить", callback_data="new"), InlineKeyboardButton(text="📥 Входящие", callback_data="inbox")],
+        [InlineKeyboardButton(text="ℹ️ Инфо", callback_data="info"), InlineKeyboardButton(text="🔗 Код", callback_data="source")],
+        [InlineKeyboardButton(text="❓ Помощь", callback_data="help")],
+    ])
 
 @dp.message(F.text.startswith("/"))
 async def cmd_router(m):
-    """Route all slash commands."""
     text = m.text
     if text in ["/start", "/menu"]:
-        await m.answer(START_TEXT, reply_markup=make_kb())
-    elif text == "/new":
+        await m.answer("TempMail.plus Бот
+Мониторинг почты любых провайдеров
+
+Возможности:
+Gmail, Yahoo, Outlook, 13 доменов
+
+Как пользоваться:
+1. Нажмите Установить
+2. Введите email
+3. Нажмите Входящие", reply_markup=make_kb())
+    elif text.startswith("/set"):
         s = get_session(m.chat.id)
-        await m.answer(handle_new(m.chat.id, s))
+        await m.answer(handle_set(text, s))
     elif text == "/inbox":
         s = get_session(m.chat.id)
         await m.answer(handle_inbox(m.chat.id, s))
     elif text == "/info":
-        await m.answer(INFO_TEXT, reply_markup=make_kb())
-    elif text == "/help":
-        await m.answer(HELP_TEXT, reply_markup=make_kb())
+        await m.answer("TempMail.plus — Инфо
 
+Сервис: TempMail.plus
+Описание: Мониторинг почты любых провайдеров
+Возможности: Gmail, Yahoo, Outlook, 13 доменов
+API: https://tempmail.plus/api/mails
+Сайт: https://tempmail.plus
+Код: https://github.com/cpner/temp-email-api-checker/blob/main/english/aiogram-3/bot_tempmail_plus.py
+Автор: Владислав Софронов (@icesq)
+Лицензия: MIT", reply_markup=make_kb())
+    elif text == "/help":
+        await m.answer("TempMail.plus — Команды
+
+/start — Главное меню
+/set — Установить
+/inbox — Проверить
+/info — Инфо
+/help — Помощь", reply_markup=make_kb())
 
 @dp.callback_query(F.data == "new")
 async def cb_new(call):
-    """Handle New Email button."""
     s = get_session(call.message.chat.id)
     await bot.edit_message_text(handle_new(call.message.chat.id, s), call.message.chat.id, call.message.message_id, reply_markup=make_kb())
 
 @dp.callback_query(F.data == "inbox")
 async def cb_inbox(call):
-    """Handle Inbox button."""
     s = get_session(call.message.chat.id)
     await bot.edit_message_text(handle_inbox(call.message.chat.id, s), call.message.chat.id, call.message.message_id, reply_markup=make_kb())
 
 @dp.callback_query(F.data == "info")
 async def cb_info(call):
-    """Handle Info button."""
-    await bot.edit_message_text(INFO_TEXT, call.message.chat.id, call.message.message_id, reply_markup=make_kb())
+    await bot.edit_message_text("TempMail.plus — Инфо
+
+Сервис: TempMail.plus
+Описание: Мониторинг почты любых провайдеров
+Возможности: Gmail, Yahoo, Outlook, 13 доменов
+API: https://tempmail.plus/api/mails
+Сайт: https://tempmail.plus
+Код: https://github.com/cpner/temp-email-api-checker/blob/main/english/aiogram-3/bot_tempmail_plus.py
+Автор: Владислав Софронов (@icesq)
+Лицензия: MIT", call.message.chat.id, call.message.message_id, reply_markup=make_kb())
 
 @dp.callback_query(F.data == "source")
 async def cb_source(call):
-    """Handle Source button."""
-    await bot.edit_message_text("Source: " + SOURCE_URL, call.message.chat.id, call.message.message_id, reply_markup=make_kb())
+    await bot.edit_message_text("Source: " + "https://github.com/cpner/temp-email-api-checker/blob/main/english/aiogram-3/bot_tempmail_plus.py", call.message.chat.id, call.message.message_id, reply_markup=make_kb())
 
 @dp.callback_query(F.data == "help")
 async def cb_help(call):
-    """Handle Help button."""
-    await bot.edit_message_text(HELP_TEXT, call.message.chat.id, call.message.message_id, reply_markup=make_kb())
+    await bot.edit_message_text("TempMail.plus — Команды
 
+/start — Главное меню
+/set — Установить
+/inbox — Проверить
+/info — Инфо
+/help — Помощь", call.message.chat.id, call.message.message_id, reply_markup=make_kb())
 
 async def main():
-    """Start polling."""
-    logger.info("Starting " + SERVICE_NAME + "...")
+    logger.info("Starting TempMail.plus...")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
