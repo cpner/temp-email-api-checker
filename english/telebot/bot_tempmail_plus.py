@@ -380,7 +380,7 @@ def callback_handler(call: types.CallbackQuery) -> None:
     session = get_session(chat_id)
     
     try:
-        if action == "new":
+        if action == "set":
             # Create new email and update message
             result = handle_new(chat_id, session)
             bot.edit_message_text(result, chat_id, call.message.message_id, reply_markup=make_keyboard())
