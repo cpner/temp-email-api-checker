@@ -146,6 +146,9 @@ def signal_handler(sig, frame):
 signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
 
-if __name__ == "__main__":
+async def main():
     logger.info("Запуск TempMail.plus...")
     await dp.start_polling(bot)
+
+if __name__ == "__main__":
+    asyncio.run(main())
