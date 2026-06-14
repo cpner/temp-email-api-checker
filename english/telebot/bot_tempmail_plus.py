@@ -128,7 +128,7 @@ def cb(call):
         elif call.data == "info":
             bot.edit_message_text("TempMail.plus\nAPI: tempmail.plus/api/mails\nAuthor: @icesq", c, call.message.message_id, reply_markup=make_kb())
         elif call.data == "source":
-            bot.edit_message_text("Source: https://github.com/cpner/temp-email-api-checker/blob/main/english/telebot/bot_tempmail_plus.py", c, call.message.message_id, reply_markup=make_kb())
+            bot.edit_message_text("Source: https://github.com/cpner/temp-email-api-checker/blob/main/english/telebot/bot_tempmail_plus.py/blob/main/english/telebot/bot_tempmail_plus.py", c, call.message.message_id, reply_markup=make_kb())
         elif call.data == "help":
             bot.edit_message_text("/set email@domain.com\n/inbox - check\n/info - info", c, call.message.message_id, reply_markup=make_kb())
     except Exception as e:

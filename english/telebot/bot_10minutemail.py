@@ -16,7 +16,7 @@ Features:
 
 Author: Vladislav Sofronov (@icesq)
 Contact: feedback@gondon.su | t.me/icesq | gondon.su
-Source: https://github.com/cpner/temp-email-api-checker
+Source: https://github.com/cpner/temp-email-api-checker/blob/main/english/telebot/bot_10minutemail.py
 License: MIT
 """
 

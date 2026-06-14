@@ -14,7 +14,7 @@ Features:
 
 Author: Vladislav Sofronov (@icesq)
 Contact: feedback@gondon.su | t.me/icesq | gondon.su
-Source: https://github.com/cpner/temp-email-api-checker/blob/main/english/aiogram-2/bot_emailnator.py
+Source: https://github.com/cpner/temp-email-api-checker/blob/main/english/aiogram-3/bot_emailnator.py/blob/main/english/aiogram-2/bot_emailnator.py
 License: MIT
 """
 
