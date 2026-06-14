@@ -8,7 +8,7 @@ If you discover a security vulnerability, please report it responsibly.
 
 Instead, contact via:
 - **Email:** feedback@gondon.su
-- **Telegram:** [t.me/reejb](https://t.me/reejb)
+- **Telegram:** [t.me/icesq](https://t.me/icesq)
 - **Telegram Bot:** [t.me/marco_feedback_bot](https://t.me/marco_feedback_bot)
 
 Include:
@@ -56,6 +56,6 @@ Run `pip audit` regularly to check for vulnerabilities.
 
 ## Author
 
-**Vladislav Sofronov (cpner)**
+**Vladislav Sofronov (@icesq)**
 - Website: [gondon.su](https://gondon.su)
-- Telegram: [t.me/reejb](https://t.me/reejb)
+- Telegram: [t.me/icesq](https://t.me/icesq)

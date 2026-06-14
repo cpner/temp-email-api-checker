@@ -13,7 +13,7 @@ API: https://api.guerrillamail.com/ajax.php
 - Мониторинг в реальном времени
 
 Автор: Владислав Софронов (cpner)
-Контакт: feedback@gondon.su | t.me/reejb | gondon.su
+Контакт: feedback@gondon.su | t.me/icesq | gondon.su
 Исходный код: https://github.com/cpner/temp-email-api-checker/blob/main/russian/telebot/bot_guerrilla.py
 Лицензия: MIT
 """

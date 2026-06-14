@@ -13,7 +13,7 @@ API: https://www.emailnator.com
 - Мониторинг в реальном времени
 
 Автор: Владислав Софронов (cpner)
-Контакт: feedback@gondon.su | t.me/reejb | gondon.su
+Контакт: feedback@gondon.su | t.me/icesq | gondon.su
 Исходный код: https://github.com/cpner/temp-email-api-checker/blob/main/russian/telebot/bot_emailnator.py
 Лицензия: MIT
 """

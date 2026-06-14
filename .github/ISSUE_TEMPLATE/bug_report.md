@@ -50,5 +50,5 @@ Any other context about the problem.
 ## Contact
 
 If urgent, contact directly:
-- **Telegram:** [t.me/reejb](https://t.me/reejb)
+- **Telegram:** [t.me/icesq](https://t.me/icesq)
 - **Email:** feedback@gondon.su

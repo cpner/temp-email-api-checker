@@ -14,8 +14,8 @@ Features:
 - Change interface language (9 languages)
 - Real-time message monitoring
 
-Author: Vladislav Sofronov (cpner)
-Contact: feedback@gondon.su | t.me/reejb | gondon.su
+Author: Vladislav Sofronov (@icesq)
+Contact: feedback@gondon.su | t.me/icesq | gondon.su
 Source: https://github.com/cpner/temp-email-api-checker
 License: MIT
 """
@@ -89,7 +89,7 @@ INFO_TEXT = """*TempMail.plus — Info*
 *API:* `https://tempmail.plus/api/mails`
 *Website:* https://tempmail.plus
 *Source:* """ + SOURCE_URL + """
-*Author:* Vladislav Sofronov (cpner)
+*Author:* Vladislav Sofronov (@icesq)
 *License:* MIT"""
 
 HELP_TEXT = """*TempMail.plus — Commands*

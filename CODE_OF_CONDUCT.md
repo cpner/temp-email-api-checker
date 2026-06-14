@@ -55,6 +55,6 @@ https://www.contributor-covenant.org/version/2/0/code_of_conduct.html.
 
 ## Author
 
-**Vladislav Sofronov (cpner)**
+**Vladislav Sofronov (@icesq)**
 - Website: [gondon.su](https://gondon.su)
-- Telegram: [t.me/reejb](https://t.me/reejb)
+- Telegram: [t.me/icesq](https://t.me/icesq)

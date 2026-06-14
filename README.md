@@ -15,7 +15,7 @@
 |---|---|
 | **Name** | Vladislav Alekseevich Sofronov |
 | **GitHub** | [cpner](https://github.com/cpner) |
-| **Telegram** | [t.me/reejb](https://t.me/reejb) |
+| **Telegram** | [t.me/icesq](https://t.me/icesq) |
 | **Telegram Bot** | [t.me/marco_feedback_bot](https://t.me/marco_feedback_bot) |
 | **Email** | [feedback@gondon.su](mailto:feedback@gondon.su) |
 | **Website** | [gondon.su](https://gondon.su) |
@@ -229,13 +229,13 @@ See [SECURITY.md](SECURITY.md) for reporting vulnerabilities.
 
 This project is licensed under the MIT License — see [LICENSE](LICENSE) for details.
 
-**Author:** Vladislav Sofronov (cpner)
+**Author:** Vladislav Sofronov (@icesq)
 
 ## Contact
 
 | | |
 |---|---|
-| **Telegram** | [t.me/reejb](https://t.me/reejb) |
+| **Telegram** | [t.me/icesq](https://t.me/icesq) |
 | **Bot** | [t.me/marco_feedback_bot](https://t.me/marco_feedback_bot) |
 | **Email** | [feedback@gondon.su](mailto:feedback@gondon.su) |
 | **Website** | [gondon.su](https://gondon.su) |

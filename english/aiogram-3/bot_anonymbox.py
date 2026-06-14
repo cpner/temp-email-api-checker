@@ -12,8 +12,8 @@ Features:
 - Create disposable email addresses
 - Check inbox for new messages
 
-Author: Vladislav Sofronov (cpner)
-Contact: feedback@gondon.su | t.me/reejb | gondon.su
+Author: Vladislav Sofronov (@icesq)
+Contact: feedback@gondon.su | t.me/icesq | gondon.su
 Source: https://github.com/cpner/temp-email-api-checker/blob/main/english/aiogram-2/bot_anonymbox.py
 License: MIT
 """
@@ -75,7 +75,7 @@ INFO_TEXT = """*AnonymBox — Info*
 *API:* `https://api.anonymbox.com/v1`
 *Website:* https://anonymbox.com
 *Source:* """ + SOURCE_URL + """
-*Author:* Vladislav Sofronov (cpner)
+*Author:* Vladislav Sofronov (@icesq)
 *License:* MIT"""
 
 HELP_TEXT = """*AnonymBox — Commands*

@@ -12,8 +12,8 @@ Features:
 - Create disposable email addresses
 - Check inbox for new messages
 
-Author: Vladislav Sofronov (cpner)
-Contact: feedback@gondon.su | t.me/reejb | gondon.su
+Author: Vladislav Sofronov (@icesq)
+Contact: feedback@gondon.su | t.me/icesq | gondon.su
 Source: https://github.com/cpner/temp-email-api-checker/blob/main/english/aiogram-2/bot_mailsac.py
 License: MIT
 """
@@ -76,7 +76,7 @@ INFO_TEXT = """*MailSac — Info*
 *API:* `https://mailsac.com/api`
 *Website:* https://mailsac.com
 *Source:* """ + SOURCE_URL + """
-*Author:* Vladislav Sofronov (cpner)
+*Author:* Vladislav Sofronov (@icesq)
 *License:* MIT"""
 
 HELP_TEXT = """*MailSac — Commands*

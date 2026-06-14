@@ -12,8 +12,8 @@ Features:
 - Create disposable email addresses
 - Check inbox for new messages
 
-Author: Vladislav Sofronov (cpner)
-Contact: feedback@gondon.su | t.me/reejb | gondon.su
+Author: Vladislav Sofronov (@icesq)
+Contact: feedback@gondon.su | t.me/icesq | gondon.su
 Source: https://github.com/cpner/temp-email-api-checker/blob/main/english/aiogram-2/bot_guerrilla.py
 License: MIT
 """
@@ -76,7 +76,7 @@ INFO_TEXT = """*Guerrilla Mail — Info*
 *API:* `https://api.guerrillamail.com/ajax.php`
 *Website:* https://www.guerrillamail.com
 *Source:* """ + SOURCE_URL + """
-*Author:* Vladislav Sofronov (cpner)
+*Author:* Vladislav Sofronov (@icesq)
 *License:* MIT"""
 
 HELP_TEXT = """*Guerrilla Mail — Commands*

@@ -13,7 +13,7 @@ Install: pip install aiogram==2.25.1 requests
 - Check inbox for new messages
 
 Автор: Владислав Софронов (cpner)
-Контакт: feedback@gondon.su | t.me/reejb | gondon.su
+Контакт: feedback@gondon.su | t.me/icesq | gondon.su
 Код: https://github.com/cpner/temp-email-api-checker/blob/main/russian/aiogram-2/bot_mailslurp.py
 Лицензия: MIT
 """
