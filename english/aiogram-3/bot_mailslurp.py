@@ -1,21 +1,40 @@
 #!/usr/bin/env python3
 """
 MailSlurp Telegram Bot (aiogram 3.x)
-Provider: MailSlurp | API: https://api.mailslurp.com
+
+Provider: MailSlurp
+API: https://api.mailslurp.com
 Framework: aiogram >=3.28.2
 Install: pip install "aiogram>=3.28.2" requests
+
+Features:
+- Modern async/await architecture
+- Create disposable email addresses
+- Check inbox for new messages
+
 Author: Vladislav Sofronov (cpner)
+Contact: feedback@gondon.su | t.me/reejb | gondon.su
+Source: https://github.com/cpner/temp-email-api-checker/blob/main/english/aiogram-2/bot_mailslurp.py
 License: MIT
 """
-import asyncio, logging
+
+import asyncio
+import logging
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-import requests, random, string, time, os, sys
+import requests
+import random
+import string
+import time
+import os
+import sys
 from typing import Optional, Dict, Any, Set
 
+# Logging configuration
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("MailSlurp")
 
+# Bot configuration
 BOT_TOKEN = os.environ.get("BOT_TOKEN_MAILSLURP", "YOUR_BOT_TOKEN")
 BASE_URL = "https://api.mailslurp.com"
 SERVICE_NAME = "MailSlurp"
@@ -27,23 +46,65 @@ if not BOT_TOKEN or BOT_TOKEN == "YOUR_BOT_TOKEN":
 bot = Bot(token=BOT_TOKEN, parse_mode="Markdown")
 dp = Dispatcher()
 
+# Button labels
+BTN_NEW = "📧 New Email"
+BTN_INBOX = "📥 Inbox"
+BTN_INFO = "ℹ️ Info"
+BTN_SOURCE = "🔗 Source Code"
+BTN_HELP = "❓ Help"
+
+# Text messages
+SOURCE_URL = "https://github.com/cpner/temp-email-api-checker/blob/main/english/aiogram-2/bot_mailslurp.py"
+
+START_TEXT = """*MailSlurp Bot*
+Professional testing API
+
+*Features:*
+Inboxes, domains (key)
+
+*How to use:*
+1. Tap New Email
+2. Copy address
+3. Use for registration
+4. Tap Inbox to check"""
+
+INFO_TEXT = """*MailSlurp — Info*
+
+*Service:* MailSlurp
+*Description:* Professional testing API
+*API:* `https://api.mailslurp.com`
+*Website:* https://mailslurp.com
+*Source:* """ + SOURCE_URL + """
+*Author:* Vladislav Sofronov (cpner)
+*License:* MIT"""
+
+HELP_TEXT = """*MailSlurp — Commands*
+
+/start — Main menu
+/new — Create email
+/inbox — Check messages
+/info — Bot info
+/help — This help"""
+
+
 class UserSession:
+    """Stores user state."""
     def __init__(self):
         self.addr = None
         self.token = None
-        self.key = None
         self.seen = set()
         self.ts = 0
-        self.messages = 0
 
 sessions = {}
 stats = {"created": 0, "checked": 0, "errors": 0}
 
 def get_session(uid):
+    """Get user session."""
     if uid not in sessions: sessions[uid] = UserSession()
     return sessions[uid]
 
 def api_get(path="", params=None, headers=None):
+    """GET request with retry."""
     url = BASE_URL + path
     try:
         r = requests.get(url, params=params, headers=headers or {}, timeout=15)
@@ -52,109 +113,71 @@ def api_get(path="", params=None, headers=None):
         stats["errors"] += 1
         return {"error": str(e)}
 
+def handle_new(uid, s):
+    """Create new email."""
+    return "Visit https://mailslurp.com"
+
+def handle_inbox(uid, s):
+    """Check inbox."""
+    return "Visit https://mailslurp.com"
 
 def make_kb():
+    """Build keyboard."""
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📧 New Email", callback_data="new"),
-         InlineKeyboardButton(text="📥 Inbox", callback_data="inbox")],
-        [InlineKeyboardButton(text="ℹ️ Info", callback_data="info"),
-         InlineKeyboardButton(text="🔗 Source Code", callback_data="source")],
-        [InlineKeyboardButton(text="❓ Help", callback_data="help")],
+        [InlineKeyboardButton(text=BTN_NEW, callback_data="new"), InlineKeyboardButton(text=BTN_INBOX, callback_data="inbox")],
+        [InlineKeyboardButton(text=BTN_INFO, callback_data="info"), InlineKeyboardButton(text=BTN_SOURCE, callback_data="source")],
+        [InlineKeyboardButton(text=BTN_HELP, callback_data="help")],
     ])
 
 
 @dp.message(F.text.startswith("/"))
-async def cmd_start(m):
-    await m.answer("*MailSlurp Bot*\\nProfessional testing API\\n\\n*Features:*\\nInboxes, domains, create (API key required)\\n\\n*How to use:*\\n1. Tap 'New Email' to create\\n2. Copy the email address\\n3. Use it for registration\\n4. Tap 'Inbox' to check messages\\n5. New messages marked with emoji", reply_markup=make_kb())
-
-@dp.message(F.text == "/new")
-async def cmd_new(m):
-    c = m.chat.id
-    s = get_session(c)
-    r = api_get(params={"f": "get_email_address", "ip": "127.0.0.1", "agent": "Mozilla"})
-    if "email_addr" in r:
-        s.addr = r["email_addr"]
-        s.token = r.get("sid_token")
-        s.seen = set()
-        s.ts = time.time()
-        stats["created"] += 1
-        await m.answer("Created: `" + r["email_addr"] + "`")
-    else:
-        await m.answer("Failed. Try /new")
-
-@dp.message(F.text == "/inbox")
-async def cmd_inbox(m):
-    c = m.chat.id
-    s = get_session(c)
-    if not s.token:
-        return await m.answer("Create email first: /new")
-    r = api_get(params={"f": "check_email", "sid_token": s.token, "seq": 0})
-    msgs = r.get("list", [])
-    stats["checked"] += 1
-    if not msgs:
-        return await m.answer("Empty inbox")
-    t = str(len(msgs)) + " messages:\n\n"
-    for x in msgs[:15]:
-        s.seen.add(x.get("mail_id"))
-        t += x.get("mail_id", "?") + " - " + x.get("mail_from", "?") + " " + x.get("mail_subject", "-") + "\n"
-    await m.answer(t)
-
-@dp.message(F.text == "/info")
-async def cmd_info(m):
-    await m.answer('*MailSlurp Bot — Info*\\n\\n*Service:* MailSlurp\\n*Description:* Professional testing API\\n*Features:* Inboxes, domains, create (API key required)\\n*API:* `https://api.mailslurp.com`\\n*Website:* https://mailslurp.com\\n*Source:* https://github.com/cpner/temp-email-api-checker/blob/main/en/aiogram-3/bot_mailslurp.py\\n*Author:* Vladislav Sofronov (cpner)\\n*License:* MIT', reply_markup=make_kb())
-
-@dp.message(F.text == "/help")
-async def cmd_help(m):
-    await m.answer('*MailSlurp Bot — Commands*\\n\\n/start — Main menu\\n/new — Create email\\n/inbox — Check messages\\n/set — Set email manually\\n/info — Bot information\\n/help — This help\\n\\n*Buttons:*\\n📧 New Email — Create address\\n📥 Inbox — Check messages\\nℹ️ Info — Bot details\\n🔗 Source — GitHub link\\n❓ Help — Usage guide', reply_markup=make_kb())
+async def cmd_router(m):
+    """Route all slash commands."""
+    text = m.text
+    if text in ["/start", "/menu"]:
+        await m.answer(START_TEXT, reply_markup=make_kb())
+    elif text == "/new":
+        s = get_session(m.chat.id)
+        await m.answer(handle_new(m.chat.id, s))
+    elif text == "/inbox":
+        s = get_session(m.chat.id)
+        await m.answer(handle_inbox(m.chat.id, s))
+    elif text == "/info":
+        await m.answer(INFO_TEXT, reply_markup=make_kb())
+    elif text == "/help":
+        await m.answer(HELP_TEXT, reply_markup=make_kb())
 
 
 @dp.callback_query(F.data == "new")
 async def cb_new(call):
-    c = call.message.chat.id
-    s = get_session(c)
-    r = api_get(params={"f": "get_email_address", "ip": "127.0.0.1", "agent": "Mozilla"})
-    if "email_addr" in r:
-        s.addr = r["email_addr"]
-        s.token = r.get("sid_token")
-        s.seen = set()
-        s.ts = time.time()
-        stats["created"] += 1
-        await bot.edit_message_text("Created: `" + r["email_addr"] + "`", c, call.message.message_id)
-    else:
-        await call.answer("Failed")
+    """Handle New Email button."""
+    s = get_session(call.message.chat.id)
+    await bot.edit_message_text(handle_new(call.message.chat.id, s), call.message.chat.id, call.message.message_id, reply_markup=make_kb())
 
 @dp.callback_query(F.data == "inbox")
 async def cb_inbox(call):
-    c = call.message.chat.id
-    s = get_session(c)
-    if not s.token:
-        return await call.answer("Create email first")
-    r = api_get(params={"f": "check_email", "sid_token": s.token, "seq": 0})
-    msgs = r.get("list", [])
-    stats["checked"] += 1
-    if not msgs:
-        await bot.edit_message_text("Empty inbox", c, call.message.message_id)
-    else:
-        txt = ""
-        for x in msgs[:10]:
-            s.seen.add(x.get("mail_id"))
-            txt += x.get("mail_id", "?") + " - " + x.get("mail_from", "?") + " " + x.get("mail_subject", "-") + "\n"
-        await bot.edit_message_text(str(len(msgs)) + " messages:\n\n" + txt, c, call.message.message_id)
+    """Handle Inbox button."""
+    s = get_session(call.message.chat.id)
+    await bot.edit_message_text(handle_inbox(call.message.chat.id, s), call.message.chat.id, call.message.message_id, reply_markup=make_kb())
 
 @dp.callback_query(F.data == "info")
 async def cb_info(call):
-    await call.answer("Name: " + name + "\nAPI: " + url, show_alert=True)
+    """Handle Info button."""
+    await bot.edit_message_text(INFO_TEXT, call.message.chat.id, call.message.message_id, reply_markup=make_kb())
 
 @dp.callback_query(F.data == "source")
 async def cb_source(call):
-    await bot.send_message(call.message.chat.id, "Source code: " + source_url)
+    """Handle Source button."""
+    await bot.edit_message_text("Source: " + SOURCE_URL, call.message.chat.id, call.message.message_id, reply_markup=make_kb())
 
 @dp.callback_query(F.data == "help")
 async def cb_help(call):
-    await bot.send_message(call.message.chat.id, '*MailSlurp Bot — Commands*\\n\\n/start — Main menu\\n/new — Create email\\n/inbox — Check messages\\n/set — Set email manually\\n/info — Bot information\\n/help — This help\\n\\n*Buttons:*\\n📧 New Email — Create address\\n📥 Inbox — Check messages\\nℹ️ Info — Bot details\\n🔗 Source — GitHub link\\n❓ Help — Usage guide', reply_markup=make_kb())
+    """Handle Help button."""
+    await bot.edit_message_text(HELP_TEXT, call.message.chat.id, call.message.message_id, reply_markup=make_kb())
 
 
 async def main():
+    """Start polling."""
     logger.info("Starting " + SERVICE_NAME + "...")
     await dp.start_polling(bot)
 

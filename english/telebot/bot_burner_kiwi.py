@@ -1,21 +1,49 @@
 #!/usr/bin/env python3
 """
 Burner.kiwi Telegram Bot
-Provider: Burner.kiwi | API: https://burner.kiwi
+
+Provider: Burner.kiwi
+API: https://burner.kiwi
 Framework: pyTelegramBotAPI 4.18.0
 Install: pip install pyTelegramBotAPI requests
+
+Features:
+- Create disposable email addresses
+- Check inbox for new messages
+- Set custom username
+- Change interface language (9 languages)
+- Real-time message monitoring
+
 Author: Vladislav Sofronov (cpner)
+Contact: feedback@gondon.su | t.me/reejb | gondon.su
+Source: https://github.com/cpner/temp-email-api-checker
 License: MIT
 """
+
 import telebot
 from telebot import types
 import requests
-import random, string, time, os, signal, sys, logging
+import random
+import string
+import time
+import os
+import signal
+import sys
+import logging
 from typing import Optional, Dict, Any, Set
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+# ═══════════════════════════════════════════════════════════════
+# Logging Configuration
+# ═══════════════════════════════════════════════════════════════
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+)
 logger = logging.getLogger("Burner.kiwi")
 
+# ═══════════════════════════════════════════════════════════════
+# Bot Configuration
+# ═══════════════════════════════════════════════════════════════
 BOT_TOKEN = os.environ.get("BOT_TOKEN_BURNER", "YOUR_BOT_TOKEN")
 BASE_URL = "https://burner.kiwi"
 SERVICE_NAME = "Burner.kiwi"
@@ -26,35 +54,139 @@ if not BOT_TOKEN or BOT_TOKEN == "YOUR_BOT_TOKEN":
 
 bot = telebot.TeleBot(BOT_TOKEN, parse_mode="Markdown")
 
+# ═══════════════════════════════════════════════════════════════
+# Constants: Button Labels
+# ═══════════════════════════════════════════════════════════════
+BTN_NEW = "📧 New Email"
+BTN_INBOX = "📥 Inbox"
+BTN_INFO = "ℹ️ Info"
+BTN_SOURCE = "🔗 Source Code"
+BTN_HELP = "❓ Help"
+
+# ═══════════════════════════════════════════════════════════════
+# Constants: Text Messages
+# ═══════════════════════════════════════════════════════════════
+SOURCE_URL = "https://github.com/cpner/temp-email-api-checker/blob/main/english/telebot/bot_burner_kiwi.py"
+
+START_TEXT = """*Burner.kiwi Bot*
+Fast 24h disposable email
+
+*Features:*
+Quick create, 24h expiry
+
+*How to use:*
+1. Tap '📧 New Email' to create
+2. Copy the email address
+3. Use it for registration
+4. Tap '📥 Inbox' to check messages
+5. New messages marked with 🆕"""
+
+INFO_TEXT = """*Burner.kiwi — Info*
+
+*Service:* Burner.kiwi
+*Description:* Fast 24h disposable email
+*Features:* Quick create, 24h expiry
+*API:* `https://burner.kiwi`
+*Website:* https://burner.kiwi
+*Source:* """ + SOURCE_URL + """
+*Author:* Vladislav Sofronov (cpner)
+*License:* MIT"""
+
+HELP_TEXT = """*Burner.kiwi — Commands*
+
+/start — Main menu
+/new — Create email
+/inbox — Check messages
+/set — Set username
+/info — Bot info
+/help — This help
+
+*Buttons:*
+📧 New Email — Create address
+📥 Inbox — Check messages
+ℹ️ Info — Bot details
+🔗 Source — GitHub link
+❓ Help — Usage guide"""
+
+
+# ═══════════════════════════════════════════════════════════════
+# User Session Management
+# ═══════════════════════════════════════════════════════════════
+
 class UserSession:
+    """Stores user state including email, token, and seen messages.
+    
+    Attributes:
+        addr: Current email address
+        token: API session token
+        seen: Set of already-read message IDs
+        ts: Timestamp of session creation
+    """
     def __init__(self):
-        self.addr = None
-        self.token = None
-        self.key = None
-        self.seen = set()
-        self.ts = 0
-        self.messages = 0
+        self.addr: Optional[str] = None
+        self.token: Optional[str] = None
+        self.seen: Set[str] = set()
+        self.ts: float = 0
 
-sessions = {}
-stats = {"created": 0, "checked": 0, "errors": 0}
+# Global session storage
+sessions: Dict[int, UserSession] = {}
+# Usage statistics
+stats: Dict[str, int] = {"created": 0, "checked": 0, "errors": 0}
 
-def get_session(uid):
-    if uid not in sessions: sessions[uid] = UserSession()
-    return sessions[uid]
 
-def api_get(path="", params=None, headers=None):
+def get_session(user_id: int) -> UserSession:
+    """Get or create a user session by Telegram user ID.
+    
+    Args:
+        user_id: Telegram user ID
+        
+    Returns:
+        UserSession object for this user
+    """
+    if user_id not in sessions:
+        sessions[user_id] = UserSession()
+    return sessions[user_id]
+
+
+# ═══════════════════════════════════════════════════════════════
+# API Communication Layer
+# ═══════════════════════════════════════════════════════════════
+
+def api_get(path: str = "", params: Optional[Dict] = None, headers: Optional[Dict] = None) -> Dict[str, Any]:
+    """Make GET request to Burner.kiwi API with retry logic.
+    
+    Args:
+        path: URL path to append to base URL
+        params: Query parameters
+        headers: Custom HTTP headers
+        
+    Returns:
+        JSON response dict or error dict
+    """
     url = BASE_URL + path
     for attempt in range(3):
         try:
             r = requests.get(url, params=params, headers=headers or {}, timeout=15)
             return r.json() if "json" in r.headers.get("content-type", "") else {"text": r.text[:500]}
         except Exception as e:
-            logger.warning("API error: " + str(e))
-            if attempt < 2: time.sleep(1)
+            logger.warning(f"API error (attempt {attempt+1}/3): {e}")
+            if attempt < 2:
+                time.sleep(1)
     stats["errors"] += 1
-    return {"error": "Max retries"}
+    return {"error": "Max retries exceeded"}
 
-def api_post(path="", data=None, headers=None):
+
+def api_post(path: str = "", data: Optional[Dict] = None, headers: Optional[Dict] = None) -> Dict[str, Any]:
+    """Make POST request to Burner.kiwi API.
+    
+    Args:
+        path: URL path to append to base URL
+        data: JSON body data
+        headers: Custom HTTP headers
+        
+    Returns:
+        JSON response dict or error dict
+    """
     url = BASE_URL + path
     try:
         r = requests.post(url, json=data, headers=headers or {}, timeout=15)
@@ -64,128 +196,232 @@ def api_post(path="", data=None, headers=None):
         return {"error": str(e)}
 
 
-def make_kb():
+# ═══════════════════════════════════════════════════════════════
+# Core Logic Functions
+# ═══════════════════════════════════════════════════════════════
+
+def handle_new(user_id: int, session: UserSession) -> str:
+    """Create a new Burner.kiwi email address.
+    
+    Generates a random email address via the API and stores
+    the session token for future inbox checks.
+    
+    Args:
+        user_id: Telegram user ID
+        session: UserSession object to update
+        
+    Returns:
+        Success message with email address or error message
+    """
+    result = api_get(params={"f": "get_email_address", "ip": "127.0.0.1", "agent": "Mozilla"})
+    if "email_addr" in result:
+        session.addr = result["email_addr"]
+        session.token = result.get("sid_token")
+        session.seen = set()
+        session.ts = time.time()
+        stats["created"] += 1
+        return f"✅ Created: `{result['email_addr']}`"
+    return "❌ Failed to create email. Try again."
+
+
+def handle_inbox(user_id: int, session: UserSession) -> str:
+    """Check inbox for new messages.
+    
+    Fetches messages from the API and marks new ones with 🆕.
+    Updates the seen set to track which messages have been read.
+    
+    Args:
+        user_id: Telegram user ID
+        session: UserSession object with token
+        
+    Returns:
+        Formatted message list or status message
+    """
+    if not session.token:
+        return "❌ Create email first with /new"
+    
+    result = api_get(params={"f": "check_email", "sid_token": session.token, "seq": 0})
+    msgs = result.get("list", [])
+    stats["checked"] += 1
+    
+    if not msgs:
+        return "📭 Inbox is empty"
+    
+    lines = [f"*{len(msgs)} messages*\n"]
+    for msg in msgs[:15]:
+        mid = msg.get("mail_id", "?")
+        is_new = mid not in session.seen
+        marker = "🆕 " if is_new else ""
+        session.seen.add(mid)
+        lines.append(f"{marker}`{mid}` | {msg.get('mail_from', '?')} | {msg.get('mail_subject', '-')}")
+    
+    return "\n".join(lines)
+
+
+def handle_set_message(text: str, session: UserSession) -> str:
+    """Set email address manually from user command.
+    
+    Parses /set <username> command and creates the email.
+    
+    Args:
+        text: Full command text (/set username)
+        session: UserSession object to update
+        
+    Returns:
+        Confirmation message or error
+    """
+    parts = text.split(maxsplit=1)
+    if len(parts) < 2:
+        return "Usage: /set <username>"
+    
+    username = parts[1].strip().replace("@", "")
+    result = api_get(params={
+        "f": "set_email_user",
+        "sid_token": session.token or "",
+        "email_user": username
+    })
+    
+    if "email_addr" in result:
+        session.addr = result["email_addr"]
+        return f"✅ Email set: `{result['email_addr']}`"
+    return "❌ Failed to set username"
+
+
+# ═══════════════════════════════════════════════════════════════
+# Keyboard Builder
+# ═══════════════════════════════════════════════════════════════
+
+def make_keyboard() -> types.InlineKeyboardMarkup:
+    """Build the main inline keyboard with navigation buttons.
+    
+    Returns:
+        InlineKeyboardMarkup with 5 buttons in 3 rows
+    """
     kb = types.InlineKeyboardMarkup(row_width=2)
     kb.add(
-        types.InlineKeyboardButton("📧 New Email", callback_data="new"),
-        types.InlineKeyboardButton("📥 Inbox", callback_data="inbox"),
+        types.InlineKeyboardButton(BTN_NEW, callback_data="new"),
+        types.InlineKeyboardButton(BTN_INBOX, callback_data="inbox"),
     )
     kb.add(
-        types.InlineKeyboardButton("ℹ️ Info", callback_data="info"),
-        types.InlineKeyboardButton("🔗 Source Code", callback_data="source"),
+        types.InlineKeyboardButton(BTN_INFO, callback_data="info"),
+        types.InlineKeyboardButton(BTN_SOURCE, callback_data="source"),
     )
     kb.add(
-        types.InlineKeyboardButton("❓ Help", callback_data="help"),
+        types.InlineKeyboardButton(BTN_HELP, callback_data="help"),
     )
     return kb
 
 
+# ═══════════════════════════════════════════════════════════════
+# Command Handlers
+# ═══════════════════════════════════════════════════════════════
+
 @bot.message_handler(commands=["start", "menu"])
-def cmd_start(m):
-    bot.send_message(m.chat.id, "*Burner.kiwi Bot*\\nFast 24-hour disposable email\\n\\n*Features:*\\nQuick create, 24h expiry\\n\\n*How to use:*\\n1. Tap 'New Email' to create\\n2. Copy the email address\\n3. Use it for registration\\n4. Tap 'Inbox' to check messages\\n5. New messages marked with emoji", reply_markup=make_kb())
+def cmd_start(message: types.Message) -> None:
+    """Handle /start command. Shows welcome message with buttons."""
+    bot.send_message(message.chat.id, START_TEXT, reply_markup=make_keyboard())
+
 
 @bot.message_handler(commands=["new"])
-def cmd_new(m):
-    c = m.chat.id
-    s = get_session(c)
-    r = api_get(params={"f": "get_email_address", "ip": "127.0.0.1", "agent": "Mozilla"})
-    if "email_addr" in r:
-        s.addr = r["email_addr"]
-        s.token = r.get("sid_token")
-        s.seen = set()
-        s.ts = time.time()
-        stats["created"] += 1
-        bot.send_message(c, "Created: `" + r["email_addr"] + "`")
-    else:
-        bot.send_message(c, "Failed. Try /new")
+def cmd_new(message: types.Message) -> None:
+    """Handle /new command. Creates new email address."""
+    session = get_session(message.chat.id)
+    result = handle_new(message.chat.id, session)
+    bot.send_message(message.chat.id, result)
+
 
 @bot.message_handler(commands=["inbox"])
-def cmd_inbox(m):
-    c = m.chat.id
-    s = get_session(c)
-    if not s.token:
-        return bot.send_message(c, "Create email first: /new")
-    r = api_get(params={"f": "check_email", "sid_token": s.token, "seq": 0})
-    msgs = r.get("list", [])
-    stats["checked"] += 1
-    if not msgs:
-        return bot.send_message(c, "Empty inbox")
-    t = str(len(msgs)) + " messages:\n\n"
-    for x in msgs[:15]:
-        s.seen.add(x.get("mail_id"))
-        t += x.get("mail_id", "?") + " - " + x.get("mail_from", "?") + " " + x.get("mail_subject", "-") + "\n"
-    bot.send_message(c, t)
+def cmd_inbox(message: types.Message) -> None:
+    """Handle /inbox command. Checks for new messages."""
+    session = get_session(message.chat.id)
+    result = handle_inbox(message.chat.id, session)
+    bot.send_message(message.chat.id, result)
+
 
 @bot.message_handler(commands=["set"])
-def cmd_set(m):
-    p = m.text.split(maxsplit=1)
-    if len(p) < 2:
-        return bot.send_message(m.chat.id, "Usage: /set <username>")
-    s = get_session(m.chat.id)
-    if not s.token:
-        return bot.send_message(m.chat.id, "Create email first: /new")
-    r = api_get(params={"f": "set_email_user", "sid_token": s.token, "email_user": p[1].strip()})
-    if "email_addr" in r:
-        s.addr = r["email_addr"]
-        bot.send_message(m.chat.id, "Email: `" + r["email_addr"] + "`")
+def cmd_set(message: types.Message) -> None:
+    """Handle /set command. Sets email manually."""
+    session = get_session(message.chat.id)
+    result = handle_set_message(message.text, session)
+    bot.send_message(message.chat.id, result)
+
 
 @bot.message_handler(commands=["info"])
-def cmd_info(m):
-    bot.send_message(m.chat.id, '*Burner.kiwi Bot — Info*\\n\\n*Service:* Burner.kiwi\\n*Description:* Fast 24-hour disposable email\\n*Features:* Quick create, 24h expiry\\n*API:* `https://burner.kiwi`\\n*Website:* https://burner.kiwi\\n*Source:* https://github.com/cpner/temp-email-api-checker/blob/main/en/telebot/bot_burner_kiwi.py\\n*Author:* Vladislav Sofronov (cpner)\\n*License:* MIT', reply_markup=make_kb())
+def cmd_info(message: types.Message) -> None:
+    """Handle /info command. Shows bot information."""
+    bot.send_message(message.chat.id, INFO_TEXT, reply_markup=make_keyboard())
+
 
 @bot.message_handler(commands=["help"])
-def cmd_help(m):
-    bot.send_message(m.chat.id, '*Burner.kiwi Bot — Commands*\\n\\n/start — Main menu\\n/new — Create email\\n/inbox — Check messages\\n/set — Set email manually\\n/info — Bot information\\n/help — This help\\n\\n*Buttons:*\\n📧 New Email — Create address\\n📥 Inbox — Check messages\\nℹ️ Info — Bot details\\n🔗 Source — GitHub link\\n❓ Help — Usage guide', reply_markup=make_kb())
+def cmd_help(message: types.Message) -> None:
+    """Handle /help command. Shows usage guide."""
+    bot.send_message(message.chat.id, HELP_TEXT, reply_markup=make_keyboard())
 
 
-@bot.callback_query_handler(func=lambda c: True)
-def cb(call):
-    c = call.message.chat.id
-    a = call.data
+# ═══════════════════════════════════════════════════════════════
+# Callback Query Handler (Inline Buttons)
+# ═══════════════════════════════════════════════════════════════
+
+@bot.callback_query_handler(func=lambda call: True)
+def callback_handler(call: types.CallbackQuery) -> None:
+    """Handle all inline button callbacks.
+    
+    Edits the current message (instead of sending new ones)
+    to keep the chat clean and provide smooth UX.
+    
+    Args:
+        call: CallbackQuery from inline button press
+    """
+    chat_id = call.message.chat.id
+    action = call.data
+    session = get_session(chat_id)
+    
     try:
-        s = get_session(c)
-        if a == "new":
-            r = api_get(params={"f": "get_email_address", "ip": "127.0.0.1", "agent": "Mozilla"})
-            if "email_addr" in r:
-                s.addr = r["email_addr"]
-                s.token = r.get("sid_token")
-                s.seen = set()
-                s.ts = time.time()
-                stats["created"] += 1
-                bot.edit_message_text("Created: `" + r["email_addr"] + "`", c, call.message.message_id)
-            else:
-                bot.answer_callback_query(call.id, "Failed")
-        elif a == "inbox":
-            if not s.token:
-                return bot.answer_callback_query(call.id, "Create email first")
-            r = api_get(params={"f": "check_email", "sid_token": s.token, "seq": 0})
-            msgs = r.get("list", [])
-            stats["checked"] += 1
-            if not msgs:
-                bot.edit_message_text("Empty inbox", c, call.message.message_id)
-            else:
-                txt = ""
-                for x in msgs[:10]:
-                    s.seen.add(x.get("mail_id"))
-                    txt += x.get("mail_id", "?") + " - " + x.get("mail_from", "?") + " " + x.get("mail_subject", "-") + "\n"
-                bot.edit_message_text(str(len(msgs)) + " messages:\n\n" + txt, c, call.message.message_id)
-        elif a == "info":
-            bot.answer_callback_query(call.id, "Name: " + name + "\nAPI: " + url, show_alert=True)
-        elif a == "source":
-            bot.send_message(c, "Source code: " + source_url)
-        elif a == "help":
-            bot.send_message(c, '*Burner.kiwi Bot — Commands*\\n\\n/start — Main menu\\n/new — Create email\\n/inbox — Check messages\\n/set — Set email manually\\n/info — Bot information\\n/help — This help\\n\\n*Buttons:*\\n📧 New Email — Create address\\n📥 Inbox — Check messages\\nℹ️ Info — Bot details\\n🔗 Source — GitHub link\\n❓ Help — Usage guide', reply_markup=make_kb())
+        if action == "new":
+            # Create new email and update message
+            result = handle_new(chat_id, session)
+            bot.edit_message_text(result, chat_id, call.message.message_id, reply_markup=make_keyboard())
+            
+        elif action == "inbox":
+            # Check inbox and update message
+            result = handle_inbox(chat_id, session)
+            bot.edit_message_text(result, chat_id, call.message.message_id, reply_markup=make_keyboard())
+            
+        elif action == "info":
+            # Show info and update message
+            bot.edit_message_text(INFO_TEXT, chat_id, call.message.message_id, reply_markup=make_keyboard())
+            
+        elif action == "source":
+            # Show source code link and update message
+            bot.edit_message_text("🔗 Source code:\n" + SOURCE_URL, chat_id, call.message.message_id, reply_markup=make_keyboard())
+            
+        elif action == "help":
+            # Show help and update message
+            bot.edit_message_text(HELP_TEXT, chat_id, call.message.message_id, reply_markup=make_keyboard())
+            
     except Exception as e:
-        logger.error("Error: " + str(e))
-        bot.answer_callback_query(call.id, err)
+        logger.error(f"Callback error: {e}")
+        bot.answer_callback_query(call.id, "Error occurred")
 
+
+# ═══════════════════════════════════════════════════════════════
+# Graceful Shutdown
+# ═══════════════════════════════════════════════════════════════
 
 def signal_handler(sig, frame):
-    logger.info("Shutting down...")
+    """Handle shutdown signals for clean exit."""
+    logger.info("Shutting down gracefully...")
     sys.exit(0)
+
 signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
 
+
+# ═══════════════════════════════════════════════════════════════
+# Entry Point
+# ═══════════════════════════════════════════════════════════════
+
 if __name__ == "__main__":
-    logger.info("Starting " + SERVICE_NAME + "...")
+    logger.info(f"Starting {SERVICE_NAME} Bot...")
+    logger.info(f"API: {BASE_URL}")
     bot.infinity_polling(timeout=60, long_polling_timeout=60)
