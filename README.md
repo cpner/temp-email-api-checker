@@ -240,6 +240,4 @@ This project is licensed under the MIT License — see [LICENSE](LICENSE) for de
 | **Email** | [feedback@gondon.su](mailto:feedback@gondon.su) |
 | **Website** | [gondon.su](https://gondon.su) |
 
-## Stargazers
 
-[![Star History Chart](https://api.star-history.com/svg?repos=cpner/temp-email-api-checker&type=Date)](https://star-history.com/#cpner/temp-email-api-checker&Date)
