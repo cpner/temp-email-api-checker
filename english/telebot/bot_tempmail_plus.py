@@ -5,11 +5,9 @@ TempMail.plus Telegram Bot
 Provider: TempMail.plus
 API: https://tempmail.plus/api/mails
 Framework: pyTelegramBotAPI 4.18.0
-Install: pip install pyTelegramBotAPI requests
 
-Author: Владислав Софронов (@icesq)
+Author: Vladislav Sofronov (@icesq)
 Contact: feedback@gondon.su | t.me/icesq | gondon.su
-Source: https://github.com/cpner/temp-email-api-checker/blob/main/english/telebot/bot_tempmail_plus.py
 License: MIT
 """
 import telebot
@@ -38,8 +36,8 @@ class UserSession:
         self.seen = set()
         self.ts = 0
 
-sessions = {}
-stats = {"created": 0, "checked": 0, "errors": 0}
+sessions = {{}}
+stats = {{"created": 0, "checked": 0, "errors": 0}}
 
 def get_session(uid):
     if uid not in sessions: sessions[uid] = UserSession()
@@ -47,96 +45,76 @@ def get_session(uid):
 
 def api_get(path="", params=None, headers=None):
     url = BASE_URL + path
-    default_headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    default_headers = {{"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}}
     if headers: default_headers.update(headers)
     for attempt in range(3):
         try:
             r = requests.get(url, params=params, headers=default_headers, timeout=15)
-            return r.json() if "json" in r.headers.get("content-type", "") else {"text": r.text[:500]}
+            return r.json() if "json" in r.headers.get("content-type", "") else {{"text": r.text[:500]}}
         except Exception as e:
-            logger.warning(f"API error: {e}")
+            logger.warning(f"API error: {{e}}")
             if attempt < 2: time.sleep(1)
     stats["errors"] += 1
-    return {"error": "Max retries"}
+    return {{"error": "Max retries"}}
 
 def handle_new(uid, s):
-    return "Используйте /set email@domain.com"
+    """TempMail.plus monitors existing emails. User must /set email first."""
+    return "Use /set email@domain.com to start monitoring"
 
 def handle_inbox(uid, s):
-    if not s.addr: return "Установите почту"
-    result = api_get(params={"email": s.addr})
+    """Check inbox for messages on TempMail.plus."""
+    if not s.addr:
+        return "Set email first with /set"
+    result = api_get(params={{"email": s.addr}})
     mails = result.get("mail", [])
     stats["checked"] += 1
-    if not mails: return "Пусто"
-    t = str(len(mails)) + " писем:\n"
+    if not mails:
+        return "Inbox empty"
+    t = str(len(mails)) + " messages:\n"
     for m in mails[:15]:
         mid = m.get("mail_id", "?")
-        marker = "🆕 " if mid not in s.seen else ""
+        marker = "NEW " if mid not in s.seen else ""
         s.seen.add(mid)
         t += marker + mid + " | " + m.get("mail_from", "?") + " | " + m.get("mail_subject", "-") + "\n"
     return t
 
 def handle_set(text, s):
+    """Set email address to monitor."""
     parts = text.split(maxsplit=1)
-    if len(parts) < 2: return "Использование: /set email@domain.com"
+    if len(parts) < 2:
+        return "Usage: /set email@domain.com"
     s.addr = parts[1].strip()
     s.seen = set()
-    return "Мониторинг: " + s.addr
+    return "Monitoring: " + s.addr
 
 def make_kb():
     kb = types.InlineKeyboardMarkup(row_width=2)
-    kb.add(types.InlineKeyboardButton("📧 Установить", callback_data="new"), types.InlineKeyboardButton("📥 Входящие", callback_data="inbox"))
-    kb.add(types.InlineKeyboardButton("ℹ️ Инфо", callback_data="info"), types.InlineKeyboardButton("🔗 Код", callback_data="source"))
-    kb.add(types.InlineKeyboardButton("❓ Помощь", callback_data="help"))
+    kb.add(types.InlineKeyboardButton("Set Email", callback_data="new"), types.InlineKeyboardButton("Inbox", callback_data="inbox"))
+    kb.add(types.InlineKeyboardButton("Info", callback_data="info"), types.InlineKeyboardButton("Source", callback_data="source"))
+    kb.add(types.InlineKeyboardButton("Help", callback_data="help"))
     return kb
 
 @bot.message_handler(commands=["start", "menu"])
 def cmd_start(m):
-    bot.send_message(m.chat.id, "TempMail.plus Бот
-Мониторинг почты любых провайдеров
-
-Возможности:
-Gmail, Yahoo, Outlook, 13 доменов
-
-Как пользоваться:
-1. Нажмите Установить
-2. Введите email
-3. Нажмите Входящие", reply_markup=make_kb())
+    bot.send_message(m.chat.id, "TempMail.plus Bot\nMonitor inbox for any email\n\nHow to use:\n1. /set email@domain.com\n2. /inbox to check", reply_markup=make_kb())
 
 @bot.message_handler(commands=["set"])
 def cmd_set(m):
     s = get_session(m.chat.id)
-    result = handle_set(m.text, s)
-    bot.send_message(m.chat.id, result)
+    bot.send_message(m.chat.id, handle_set(m.text, s))
 
 @bot.message_handler(commands=["inbox"])
 def cmd_inbox(m):
     s = get_session(m.chat.id)
-    result = handle_inbox(m.chat.id, s)
-    bot.send_message(m.chat.id, result)
+    bot.send_message(m.chat.id, handle_inbox(m.chat.id, s))
 
 @bot.message_handler(commands=["info"])
 def cmd_info(m):
-    bot.send_message(m.chat.id, "TempMail.plus — Инфо
-
-Сервис: TempMail.plus
-Описание: Мониторинг почты любых провайдеров
-Возможности: Gmail, Yahoo, Outlook, 13 доменов
-API: https://tempmail.plus/api/mails
-Сайт: https://tempmail.plus
-Код: https://github.com/cpner/temp-email-api-checker/blob/main/english/telebot/bot_tempmail_plus.py
-Автор: Владислав Софронов (@icesq)
-Лицензия: MIT", reply_markup=make_kb())
+    bot.send_message(m.chat.id, "TempMail.plus\nAPI: tempmail.plus/api/mails\nWebsite: tempmail.plus\nAuthor: Vladislav Sofronov (@icesq)", reply_markup=make_kb())
 
 @bot.message_handler(commands=["help"])
 def cmd_help(m):
-    bot.send_message(m.chat.id, "TempMail.plus — Команды
-
-/start — Главное меню
-/set — Установить
-/inbox — Проверить
-/info — Инфо
-/help — Помощь", reply_markup=make_kb())
+    bot.send_message(m.chat.id, "/set email@domain.com\n/inbox - check\n/info - info", reply_markup=make_kb())
 
 @bot.callback_query_handler(func=lambda c: True)
 def cb(call):
@@ -148,32 +126,17 @@ def cb(call):
         elif call.data == "inbox":
             bot.edit_message_text(handle_inbox(c, s), c, call.message.message_id, reply_markup=make_kb())
         elif call.data == "info":
-            bot.edit_message_text("TempMail.plus — Инфо
-
-Сервис: TempMail.plus
-Описание: Мониторинг почты любых провайдеров
-Возможности: Gmail, Yahoo, Outlook, 13 доменов
-API: https://tempmail.plus/api/mails
-Сайт: https://tempmail.plus
-Код: https://github.com/cpner/temp-email-api-checker/blob/main/english/telebot/bot_tempmail_plus.py
-Автор: Владислав Софронов (@icesq)
-Лицензия: MIT", c, call.message.message_id, reply_markup=make_kb())
+            bot.edit_message_text("TempMail.plus\nAPI: tempmail.plus/api/mails\nAuthor: @icesq", c, call.message.message_id, reply_markup=make_kb())
         elif call.data == "source":
-            bot.edit_message_text("Source: " + "https://github.com/cpner/temp-email-api-checker/blob/main/english/telebot/bot_tempmail_plus.py", c, call.message.message_id, reply_markup=make_kb())
+            bot.edit_message_text("Source: https://github.com/cpner/temp-email-api-checker/blob/main/english/telebot/bot_tempmail_plus.py", c, call.message.message_id, reply_markup=make_kb())
         elif call.data == "help":
-            bot.edit_message_text("TempMail.plus — Команды
-
-/start — Главное меню
-/set — Установить
-/inbox — Проверить
-/info — Инфо
-/help — Помощь", c, call.message.message_id, reply_markup=make_kb())
+            bot.edit_message_text("/set email@domain.com\n/inbox - check\n/info - info", c, call.message.message_id, reply_markup=make_kb())
     except Exception as e:
         if "message is not modified" in str(e):
             bot.answer_callback_query(call.id)
         else:
             logger.error(str(e))
-            bot.answer_callback_query(call.id, "Ошибка")
+            bot.answer_callback_query(call.id, "Error")
 
 def signal_handler(sig, frame):
     logger.info("Shutting down...")
