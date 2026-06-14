@@ -119,12 +119,12 @@ def get_session(uid: int) -> UserSession:
 def api_get(path: str = "", params: Optional[Dict] = None, headers: Optional[Dict] = None) -> Dict[str, Any]:
     """GET-запрос к API с повторными попытками."""
     url = BASE_URL + path
+    default_headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    if headers:
+        default_headers.update(headers)
     for attempt in range(3):
         try:
-            default_headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-        if headers:
-            default_headers.update(headers)
-        r = requests.get(url, params=params, headers=default_headers, timeout=15)
+            r = requests.get(url, params=params, headers=default_headers, timeout=15)
             return r.json() if "json" in r.headers.get("content-type", "") else {"text": r.text[:500]}
         except Exception as e:
             logger.warning(f"Ошибка API (попытка {attempt+1}/3): {e}")
