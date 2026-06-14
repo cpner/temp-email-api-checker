@@ -166,7 +166,10 @@ def api_get(path: str = "", params: Optional[Dict] = None, headers: Optional[Dic
     url = BASE_URL + path
     for attempt in range(3):
         try:
-            r = requests.get(url, params=params, headers=headers or {}, timeout=15)
+            default_headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        if headers:
+            default_headers.update(headers)
+        r = requests.get(url, params=params, headers=default_headers, timeout=15)
             return r.json() if "json" in r.headers.get("content-type", "") else {"text": r.text[:500]}
         except Exception as e:
             logger.warning(f"API error (attempt {attempt+1}/3): {e}")
@@ -400,8 +403,11 @@ def callback_handler(call: types.CallbackQuery) -> None:
             bot.edit_message_text(HELP_TEXT, chat_id, call.message.message_id, reply_markup=make_keyboard())
             
     except Exception as e:
-        logger.error(f"Callback error: {e}")
-        bot.answer_callback_query(call.id, "Error occurred")
+        if "message is not modified" in str(e):
+            bot.answer_callback_query(call.id)
+        else:
+            logger.error(f"Callback error: {e}")
+            bot.answer_callback_query(call.id, "Error occurred")
 
 
 # ═══════════════════════════════════════════════════════════════

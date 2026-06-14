@@ -108,7 +108,10 @@ def api_get(path="", params=None, headers=None):
     """GET request with retry."""
     url = BASE_URL + path
     try:
-        r = requests.get(url, params=params, headers=headers or {}, timeout=15)
+        default_headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        if headers:
+            default_headers.update(headers)
+        r = requests.get(url, params=params, headers=default_headers, timeout=15)
         return r.json() if "json" in r.headers.get("content-type", "") else {"text": r.text[:500]}
     except Exception as e:
         stats["errors"] += 1

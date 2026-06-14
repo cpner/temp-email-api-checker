@@ -155,6 +155,9 @@ def get_session(user_id: int) -> UserSession:
 def api_get(path: str = "", params: Optional[Dict] = None, headers: Optional[Dict] = None) -> Dict[str, Any]:
     """Make GET request to Guerrilla Mail API with retry logic.
     
+    Includes User-Agent header to avoid being blocked.
+    Retries up to 3 times with exponential backoff.
+    
     Args:
         path: URL path to append to base URL
         params: Query parameters
@@ -164,9 +167,14 @@ def api_get(path: str = "", params: Optional[Dict] = None, headers: Optional[Dic
         JSON response dict or error dict
     """
     url = BASE_URL + path
+    # Default User-Agent to avoid 403 errors
+    default_headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    if headers:
+        default_headers.update(headers)
+    
     for attempt in range(3):
         try:
-            r = requests.get(url, params=params, headers=headers or {}, timeout=15)
+            r = requests.get(url, params=params, headers=default_headers, timeout=15)
             return r.json() if "json" in r.headers.get("content-type", "") else {"text": r.text[:500]}
         except Exception as e:
             logger.warning(f"API error (attempt {attempt+1}/3): {e}")
@@ -399,9 +407,19 @@ def callback_handler(call: types.CallbackQuery) -> None:
             # Show help and update message
             bot.edit_message_text(HELP_TEXT, chat_id, call.message.message_id, reply_markup=make_keyboard())
             
+    except telebot.apihelper.ApiTelegramException as e:
+        # Handle "message is not modified" - user clicked same button
+        if "message is not modified" in str(e):
+            bot.answer_callback_query(call.id)
+        else:
+            logger.error(f"API error: {e}")
+            bot.answer_callback_query(call.id, "Error occurred")
     except Exception as e:
-        logger.error(f"Callback error: {e}")
-        bot.answer_callback_query(call.id, "Error occurred")
+        if "message is not modified" in str(e):
+            bot.answer_callback_query(call.id)
+        else:
+            logger.error(f"Callback error: {e}")
+            bot.answer_callback_query(call.id, "Error occurred")
 
 
 # ═══════════════════════════════════════════════════════════════
